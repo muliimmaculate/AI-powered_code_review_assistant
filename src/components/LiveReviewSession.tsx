@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, Mic, MicOff, VideoOff, Users, MessageSquare, Share, Settings, Phone, UserPlus, Play, Square } from 'lucide-react';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, collection, addDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, collection, addDoc, query, where, orderBy, serverTimestamp, getDocs, deleteDoc } from 'firebase/firestore';
 
 interface Participant {
   id: string;
@@ -28,11 +28,11 @@ interface LiveReviewSessionProps {
   sessionId: string;
   codeContent: string;
   onCodeChange: (code: string) => void;
-  participants?: any[];
-  isActive?: boolean;
-  onStartSession?: () => void;
-  onEndSession?: () => void;
-  onNotification?: (message: string) => void;
+  participants: any[];
+  isActive: boolean;
+  onStartSession: () => void;
+  onEndSession: () => void;
+  onNotification: (msg: string) => void;
 }
 
 const firebaseConfig = {
@@ -51,17 +51,10 @@ const db = getFirestore(app);
 // WebRTC helpers
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({ 
-  sessionId, 
-  codeContent, 
-  onCodeChange,
-  participants: propParticipants,
-  isActive: propIsActive,
-  onStartSession,
-  onEndSession,
-  onNotification
-}) => {
-  const [participants, setParticipants] = useState<Participant[]>(propParticipants || []);
+export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({ sessionId, ...props }) => {
+  // Use sessionId for all Firebase/WebRTC room logic
+  // Example: const roomRef = firebase.firestore().collection('sessions').doc(sessionId);
+  const [participants, setParticipants] = useState<Participant[]>(props.participants || []);
   const [comments, setComments] = useState<LiveComment[]>([]);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
@@ -71,7 +64,7 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
   const [selectedLine, setSelectedLine] = useState<number | null>(null);
   const [showParticipants, setShowParticipants] = useState(true);
   const [showChat, setShowChat] = useState(true);
-  const [isSessionActive, setIsSessionActive] = useState(propIsActive || false);
+  const [isSessionActive, setIsSessionActive] = useState(props.isActive || false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
 
@@ -95,6 +88,20 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
   const [remoteStreams, setRemoteStreams] = useState<{ [id: string]: MediaStream }>({});
   const peerConnections = useRef<{ [id: string]: RTCPeerConnection }>({});
   const signalingUnsubs = useRef<(() => void)[]>([]);
+
+  const [isLobby, setIsLobby] = useState(true);
+  const [isWaitingApproval, setIsWaitingApproval] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<any[]>([]);
+  const [isHost, setIsHost] = useState(false);
+  const [hostId, setHostId] = useState<string | null>(null);
+
+  const [showJoinPrompt, setShowJoinPrompt] = useState(true);
+  const [declinedJoin, setDeclinedJoin] = useState(false);
+
+  const [preJoinName, setPreJoinName] = useState('');
+  const [preJoinReady, setPreJoinReady] = useState(false);
+  const [preJoinStream, setPreJoinStream] = useState<MediaStream | null>(null);
+  const [notAdmitted, setNotAdmitted] = useState(false);
 
   // Firestore listeners for participants and comments
   useEffect(() => {
@@ -337,39 +344,39 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
 
   const handleStartSession = () => {
     setIsSessionActive(true);
-    if (onStartSession) {
-      onStartSession();
+    if (props.onStartSession) {
+      props.onStartSession();
     }
-    if (onNotification) {
-      onNotification('Live review session started!');
+    if (props.onNotification) {
+      props.onNotification('Live review session started!');
     }
   };
 
   const handleEndSession = () => {
     setIsSessionActive(false);
-    if (onEndSession) {
-      onEndSession();
+    if (props.onEndSession) {
+      props.onEndSession();
     }
-    if (onNotification) {
-      onNotification('Live review session ended');
+    if (props.onNotification) {
+      props.onNotification('Live review session ended');
     }
   };
 
   const inviteParticipant = () => {
-    // Generate a link with the sessionId in the URL
-    const url = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
+    // Always use the deployed Netlify domain for the invite link
+    const url = `https://aicodereviewassist.netlify.app${window.location.pathname}?session=${sessionId}`;
     setInviteLink(url);
     setShowInviteModal(true);
     // Copy to clipboard
     if (navigator.clipboard) {
       navigator.clipboard.writeText(url);
     }
-    if (onNotification) {
-      onNotification('Invite link copied to clipboard!');
+    if (props.onNotification) {
+      props.onNotification('Invite link copied to clipboard!');
     }
   };
 
-  const codeLines = codeContent.split('\n');
+  const codeLines = props.codeContent.split('\n');
 
   useEffect(() => {
     if (chatRef.current) {
@@ -388,7 +395,7 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
           localStreamRef.current = stream;
         })
         .catch(err => {
-          if (onNotification) onNotification('Could not access webcam: ' + err.message);
+          if (props.onNotification) props.onNotification('Could not access webcam: ' + err.message);
         });
     } else {
       // Stop the video stream if it exists
@@ -419,15 +426,15 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
         : comment
     ));
     
-    if (onNotification) {
-      onNotification('Comment status updated');
+    if (props.onNotification) {
+      props.onNotification('Comment status updated');
     }
   };
 
   const handleLineClick = (lineNumber: number) => {
     setSelectedLine(lineNumber);
-    if (onNotification) {
-      onNotification(`Selected line ${lineNumber} for comment`);
+    if (props.onNotification) {
+      props.onNotification(`Selected line ${lineNumber} for comment`);
     }
   };
 
@@ -442,8 +449,221 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
     // Optionally: set dark mode globally
   };
 
+  // Firestore: host/participant/join request logic
+  useEffect(() => {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const hostField = async () => {
+      const sessionSnap = await getDoc(sessionRef);
+      if (!sessionSnap.exists()) {
+        // First user becomes host
+        await setDoc(sessionRef, { hostId: currentUser.id }, { merge: true });
+        setIsHost(true);
+        setHostId(currentUser.id);
+      } else {
+        const data = sessionSnap.data();
+        setHostId(data.hostId);
+        setIsHost(data.hostId === currentUser.id);
+      }
+    };
+    hostField();
+    // Listen for hostId changes
+    const unsub = onSnapshot(sessionRef, (snap) => {
+      const data = snap.data();
+      if (data?.hostId) {
+        setHostId(data.hostId);
+        setIsHost(data.hostId === currentUser.id);
+      }
+    });
+    return () => unsub();
+  }, [sessionId, currentUser.id]);
+
+  // Listen for join requests (host only)
+  useEffect(() => {
+    if (!isHost) return;
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const joinRequestsRef = collection(sessionRef, 'joinRequests');
+    const unsub = onSnapshot(joinRequestsRef, (snap) => {
+      setPendingRequests(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, [isHost, sessionId]);
+
+  // Listen for participant status (guest)
+  useEffect(() => {
+    if (isHost) return;
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const participantsRef = collection(sessionRef, 'participants');
+    const unsub = onSnapshot(participantsRef, (snap) => {
+      const found = snap.docs.find(doc => doc.id === currentUser.id);
+      if (found) {
+        setIsLobby(false);
+        setIsWaitingApproval(false);
+      }
+    });
+    return () => unsub();
+  }, [isHost, sessionId, currentUser.id]);
+
+  // Pre-join camera/mic preview
+  useEffect(() => {
+    if (!isHost && isLobby && showJoinPrompt && !declinedJoin && !preJoinReady) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+        .then(stream => setPreJoinStream(stream))
+        .catch(() => setPreJoinStream(null));
+      return () => {
+        if (preJoinStream) preJoinStream.getTracks().forEach(track => track.stop());
+      };
+    }
+  }, [isHost, isLobby, showJoinPrompt, declinedJoin, preJoinReady]);
+
+  // Request to join handler
+  const handleRequestToJoin = async () => {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const joinRequestsRef = collection(sessionRef, 'joinRequests');
+    await setDoc(doc(joinRequestsRef, currentUser.id), {
+      ...currentUser,
+      name: preJoinName || currentUser.name,
+      requestedAt: serverTimestamp(),
+    });
+    setIsWaitingApproval(true);
+  };
+
+  // Host: approve/deny join request
+  const handleApproveRequest = async (request: any) => {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const participantsRef = collection(sessionRef, 'participants');
+    await setDoc(doc(participantsRef, request.id), {
+      ...request,
+      joinedAt: serverTimestamp(),
+    }, { merge: true });
+    // Remove join request
+    const joinRequestsRef = collection(sessionRef, 'joinRequests');
+    await deleteDoc(doc(joinRequestsRef, request.id));
+  };
+  const handleDenyRequest = async (request: any) => {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const joinRequestsRef = collection(sessionRef, 'joinRequests');
+    await deleteDoc(doc(joinRequestsRef, request.id));
+    if (request.id === currentUser.id) setNotAdmitted(true);
+  };
+
+  // Pre-join lobby UI
+  if (isLobby && !isHost && showJoinPrompt && !declinedJoin && !preJoinReady) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-lg flex flex-col items-center">
+          <h2 className="text-2xl font-bold mb-4">Ready to join?</h2>
+          <div className="mb-4">
+            {preJoinStream ? (
+              <video
+                autoPlay
+                playsInline
+                muted
+                ref={el => { if (el && preJoinStream) el.srcObject = preJoinStream; }}
+                className="w-48 h-36 rounded bg-black mb-2"
+              />
+            ) : (
+              <div className="w-48 h-36 rounded bg-gray-700 flex items-center justify-center mb-2">No Camera</div>
+            )}
+          </div>
+          <input
+            type="text"
+            placeholder="Your name"
+            value={preJoinName}
+            onChange={e => setPreJoinName(e.target.value)}
+            className="mb-4 px-4 py-2 rounded bg-gray-700 text-white focus:outline-none"
+          />
+          <button
+            onClick={() => setPreJoinReady(true)}
+            className="px-6 py-3 bg-blue-600 rounded text-lg font-semibold hover:bg-blue-700"
+            disabled={!preJoinName.trim()}
+          >
+            Ask to join
+          </button>
+        </div>
+      </div>
+    );
+  }
+  // Only show join prompt if not host/participant and not declined
+  if (isLobby && !isHost && showJoinPrompt && !declinedJoin && preJoinReady) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-lg flex flex-col items-center">
+          <h2 className="text-2xl font-bold mb-4">Do you want to join this session?</h2>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setShowJoinPrompt(false)}
+              className="px-6 py-3 bg-blue-600 rounded text-lg font-semibold hover:bg-blue-700"
+            >
+              Yes
+            </button>
+            <button
+              onClick={() => { setDeclinedJoin(true); setShowJoinPrompt(false); }}
+              className="px-6 py-3 bg-gray-600 rounded text-lg font-semibold hover:bg-gray-700"
+            >
+              No
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (isLobby && !isHost && declinedJoin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-lg flex flex-col items-center">
+          <h2 className="text-2xl font-bold mb-4">You did not join the session.</h2>
+          <p className="text-lg">If you change your mind, refresh the page to join.</p>
+        </div>
+      </div>
+    );
+  }
+  // Only show lobby/join UI if not a participant
+  if (isLobby && !isHost && !showJoinPrompt && !declinedJoin) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white">
+        <h2 className="text-2xl font-bold mb-4">Request to Join Session</h2>
+        {!isWaitingApproval ? (
+          <button onClick={async () => { await handleRequestToJoin(); if (preJoinStream) preJoinStream.getTracks().forEach(track => track.stop()); }} className="px-6 py-3 bg-blue-600 rounded text-lg font-semibold hover:bg-blue-700">Request to Join</button>
+        ) : (
+          <div className="text-lg mt-4">Waiting for host to approve your request...</div>
+        )}
+      </div>
+    );
+  }
+  // If not admitted
+  if (isLobby && !isHost && notAdmitted) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full bg-gray-900 text-white">
+        <div className="bg-gray-800 p-8 rounded-lg shadow-lg flex flex-col items-center">
+          <h2 className="text-2xl font-bold mb-4">You were not admitted to the session.</h2>
+          <p className="text-lg">Please contact the host or try again later.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Host: show pending join requests
+  const renderHostJoinRequests = () => isHost && pendingRequests.length > 0 && (
+    <div className="fixed top-8 right-8 z-50 bg-gray-800 border border-gray-700 rounded-lg p-4 shadow-lg">
+      <h3 className="text-lg font-bold mb-2 text-white">Pending Join Requests</h3>
+      {pendingRequests.map(req => (
+        <div key={req.id} className="flex items-center justify-between mb-2 bg-gray-900 p-2 rounded">
+          <div className="flex items-center gap-2">
+            <img src={req.avatar} alt={req.name} className="w-8 h-8 rounded-full" />
+            <span className="text-white font-medium">{req.name}</span>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => handleApproveRequest(req)} className="bg-green-600 px-3 py-1 rounded text-white hover:bg-green-700">Approve</button>
+            <button onClick={() => handleDenyRequest(req)} className="bg-red-600 px-3 py-1 rounded text-white hover:bg-red-700">Deny</button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden h-[600px] flex">
+      {renderHostJoinRequests()}
       {/* Invite Modal */}
       {showInviteModal && inviteLink && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -594,8 +814,8 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
               <div className="flex-1 relative">
                 <textarea
                   ref={codeRef}
-                  value={codeContent}
-                  onChange={(e) => onCodeChange(e.target.value)}
+                  value={props.codeContent}
+                  onChange={(e) => props.onCodeChange(e.target.value)}
                   className="w-full h-full p-4 bg-transparent text-white font-mono text-sm resize-none focus:outline-none"
                   spellCheck={false}
                   disabled={!isSessionActive}

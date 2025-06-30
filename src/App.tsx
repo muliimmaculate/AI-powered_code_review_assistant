@@ -9,10 +9,10 @@ import { AIChat } from './components/AIChat';
 import { PerformancePanel } from './components/PerformancePanel';
 import { CustomRulesPanel } from './components/CustomRulesPanel';
 import { TeamDashboard } from './components/TeamDashboard';
-import { LiveReviewSession } from './components/LiveReviewSession';
 import { ReviewerAssignment } from './components/ReviewerAssignment';
 import { ReviewHistory } from './components/ReviewHistory';
 import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, BarChart3, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
+import { Routes, Route, useParams, Navigate } from 'react-router-dom';
 
 interface Issue {
   id: number;
@@ -53,6 +53,18 @@ interface TeamMember {
   avatar: string;
   role: 'developer' | 'senior' | 'lead' | 'architect';
   isOnline: boolean;
+  expertise: string[];
+  stats: {
+    reviewsCompleted: number;
+    codeQualityScore: number;
+    issuesFixed: number;
+    linesReviewed: number;
+  };
+  activity: {
+    lastActive: Date;
+    currentStreak: number;
+    totalContributions: number;
+  };
 }
 
 interface LiveSession {
@@ -78,7 +90,7 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'review' | 'metrics' | 'performance' | 'rules' | 'comparison' | 'chat' | 'team' | 'live' | 'assignment' | 'history' | 'settings'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'metrics' | 'performance' | 'rules' | 'comparison' | 'chat' | 'team' | 'assignment' | 'history' | 'settings' | 'export'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -93,7 +105,10 @@ function App() {
       email: 'sarah@company.com',
       avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?w=100&h=100&fit=crop&crop=face',
       role: 'lead',
-      isOnline: true
+      isOnline: true,
+      expertise: ['React', 'TypeScript', 'Node.js', 'Architecture'],
+      stats: { reviewsCompleted: 45, codeQualityScore: 9.2, issuesFixed: 128, linesReviewed: 15420 },
+      activity: { lastActive: new Date(), currentStreak: 12, totalContributions: 234 }
     },
     {
       id: '2',
@@ -101,7 +116,10 @@ function App() {
       email: 'marcus@company.com',
       avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100&h=100&fit=crop&crop=face',
       role: 'senior',
-      isOnline: true
+      isOnline: true,
+      expertise: ['Python', 'Django', 'PostgreSQL', 'DevOps'],
+      stats: { reviewsCompleted: 38, codeQualityScore: 8.7, issuesFixed: 95, linesReviewed: 12300 },
+      activity: { lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), currentStreak: 8, totalContributions: 189 }
     },
     {
       id: '3',
@@ -109,7 +127,10 @@ function App() {
       email: 'elena@company.com',
       avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=100&h=100&fit=crop&crop=face',
       role: 'developer',
-      isOnline: false
+      isOnline: false,
+      expertise: ['Vue.js', 'JavaScript', 'CSS', 'UI/UX'],
+      stats: { reviewsCompleted: 29, codeQualityScore: 8.4, issuesFixed: 67, linesReviewed: 8900 },
+      activity: { lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), currentStreak: 5, totalContributions: 156 }
     }
   ]);
 
@@ -125,7 +146,6 @@ function App() {
   const allTabs = [
     { id: 'review', label: 'Review', icon: Code, primary: true },
     { id: 'team', label: 'Team', icon: Users, primary: true },
-    { id: 'live', label: 'Live', icon: Video, primary: true },
     { id: 'assignment', label: 'Assign', icon: UserCheck, primary: false },
     { id: 'history', label: 'History', icon: History, primary: false },
     { id: 'performance', label: 'Performance', icon: Zap, primary: false },
@@ -133,7 +153,8 @@ function App() {
     { id: 'rules', label: 'Rules', icon: Wrench, primary: false },
     { id: 'comparison', label: 'Compare', icon: GitCompare, primary: false },
     { id: 'chat', label: 'AI Chat', icon: MessageSquare, primary: false },
-    { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false }
+    { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false },
+    { id: 'export', label: 'Export', icon: Code, primary: false }
   ];
 
   // Split tabs into primary (always visible) and secondary (in dropdown)
@@ -623,23 +644,8 @@ function App() {
                   onNotification={addNotification}
                 />
               )}
-              {activeTab === 'live' && (
-                <LiveReviewSession 
-                  sessionId={liveSession.id}
-                  codeContent={code}
-                  onCodeChange={setCode}
-                  participants={liveSession.participants}
-                  isActive={liveSession.isActive}
-                  onStartSession={startLiveSession}
-                  onEndSession={endLiveSession}
-                  onNotification={addNotification}
-                />
-              )}
               {activeTab === 'assignment' && (
-                <ReviewerAssignment 
-                  teamMembers={teamMembers}
-                  onAssign={(reviewers) => addNotification(`Assigned reviewers: ${reviewers.join(', ')}`)}
-                />
+                <ReviewerAssignment />
               )}
               {activeTab === 'history' && (
                 <ReviewHistory 
@@ -647,40 +653,22 @@ function App() {
                 />
               )}
               {activeTab === 'performance' && (
-                <PerformancePanel 
-                  analysis={analysis}
-                  onOptimize={(suggestion) => addNotification(`Applied optimization: ${suggestion}`)}
-                />
+                <PerformancePanel analysis={analysis} />
               )}
               {activeTab === 'metrics' && (
-                <MetricsPanel 
-                  analysis={analysis}
-                  onMetricClick={(metric) => addNotification(`Viewing details for ${metric}`)}
-                />
+                <MetricsPanel analysis={analysis} />
               )}
               {activeTab === 'rules' && (
-                <CustomRulesPanel 
-                  onRulesChange={handleCustomRulesChange}
-                  onRuleTest={(result) => addNotification(`Rule test: ${result}`)}
-                />
+                <CustomRulesPanel onRulesChange={handleCustomRulesChange} />
               )}
               {activeTab === 'comparison' && (
-                <CodeComparison 
-                  analysis={analysis}
-                  onCopy={() => addNotification('Code copied to clipboard')}
-                />
+                <CodeComparison analysis={analysis} />
               )}
               {activeTab === 'chat' && (
-                <AIChat 
-                  analysis={analysis} 
-                  code={code}
-                  onSuggestionApply={(suggestion) => addNotification(`Applied AI suggestion: ${suggestion}`)}
-                />
+                <AIChat analysis={analysis} code={code} />
               )}
               {activeTab === 'settings' && (
-                <SettingsPanel 
-                  onSettingChange={(setting, value) => addNotification(`${setting} updated to ${value}`)}
-                />
+                <SettingsPanel />
               )}
             </ErrorBoundary>
           </div>
@@ -695,7 +683,7 @@ function App() {
         />
       )}
 
-      <style jsx>{`
+      <style>{`
         @keyframes slide-in-right {
           from {
             transform: translateX(100%);

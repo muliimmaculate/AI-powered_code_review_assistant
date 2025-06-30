@@ -35,7 +35,11 @@ interface TeamMember {
   avatar: string;
 }
 
-export const ReviewHistory: React.FC = () => {
+interface ReviewHistoryProps {
+  onExport?: () => void;
+}
+
+export const ReviewHistory: React.FC<ReviewHistoryProps> = ({ onExport }) => {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [authorFilter, setAuthorFilter] = useState<string>('all');

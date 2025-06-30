@@ -45,8 +45,13 @@ interface AssignmentSuggestion {
   workloadImpact: number;
 }
 
-export const ReviewerAssignment: React.FC = () => {
-  const [developers] = useState<Developer[]>([
+interface ReviewerAssignmentProps {
+  teamMembers?: Developer[];
+  onAssign?: (reviewers: string[]) => void;
+}
+
+export const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({ teamMembers: propTeamMembers, onAssign }) => {
+  const [developers] = useState<Developer[]>(propTeamMembers || [
     {
       id: '1',
       name: 'Sarah Chen',
@@ -149,6 +154,7 @@ export const ReviewerAssignment: React.FC = () => {
 
   const [assignmentMode, setAssignmentMode] = useState<'auto' | 'manual'>('auto');
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([]);
+  const [assignedReviewers, setAssignedReviewers] = useState<Developer[]>([]);
 
   const calculateAssignmentScore = (developer: Developer, request: CodeReviewRequest): AssignmentSuggestion => {
     let score = 0;
@@ -254,15 +260,20 @@ export const ReviewerAssignment: React.FC = () => {
   };
 
   const handleAssignReviewers = () => {
+    let assigned: Developer[] = [];
     if (assignmentMode === 'auto') {
-      // Auto-assign top 2 suggestions
-      const topSuggestions = suggestions.slice(0, 2);
-      console.log('Auto-assigning reviewers:', topSuggestions.map(s => s.reviewer.name));
+      assigned = suggestions.slice(0, 2).map(s => s.reviewer);
     } else {
-      // Manual assignment
-      const assignedReviewers = developers.filter(dev => selectedReviewers.includes(dev.id));
-      console.log('Manually assigning reviewers:', assignedReviewers.map(r => r.name));
+      assigned = developers.filter(dev => selectedReviewers.includes(dev.id));
     }
+    setAssignedReviewers(assigned);
+    setSelectedReviewers([]);
+    if (onAssign) onAssign(assigned.map(r => r.name));
+  };
+
+  const handleUnassignReviewer = (id: string) => {
+    const updated = assignedReviewers.filter(r => r.id !== id);
+    setAssignedReviewers(updated);
   };
 
   return (
@@ -381,6 +392,7 @@ export const ReviewerAssignment: React.FC = () => {
               <button
                 onClick={handleAssignReviewers}
                 className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={assignmentMode === 'manual' && selectedReviewers.length === 0}
               >
                 <UserCheck className="w-4 h-4" />
                 <span>Assign Reviewers</span>
@@ -396,18 +408,23 @@ export const ReviewerAssignment: React.FC = () => {
                       ? 'border-blue-500 bg-blue-900/20'
                       : 'border-gray-700'
                   } ${assignmentMode === 'auto' && index < 2 ? 'border-green-500 bg-green-900/10' : ''}`}
-                  onClick={() => {
-                    if (assignmentMode === 'manual') {
-                      setSelectedReviewers(prev => 
-                        prev.includes(suggestion.reviewer.id)
-                          ? prev.filter(id => id !== suggestion.reviewer.id)
-                          : [...prev, suggestion.reviewer.id]
-                      );
-                    }
-                  }}
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start space-x-3">
+                      {assignmentMode === 'manual' && (
+                        <input
+                          type="checkbox"
+                          checked={selectedReviewers.includes(suggestion.reviewer.id)}
+                          onChange={() => {
+                            setSelectedReviewers(prev =>
+                              prev.includes(suggestion.reviewer.id)
+                                ? prev.filter(id => id !== suggestion.reviewer.id)
+                                : [...prev, suggestion.reviewer.id]
+                            );
+                          }}
+                          className="mt-2 mr-2 accent-blue-600"
+                        />
+                      )}
                       <div className="relative">
                         <img
                           src={suggestion.reviewer.avatar}
@@ -548,6 +565,30 @@ export const ReviewerAssignment: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Assigned Reviewers Section */}
+      {assignedReviewers.length > 0 && (
+        <div className="mt-6 bg-green-900/20 border border-green-700/30 rounded-lg p-4">
+          <h3 className="text-white font-medium mb-2 flex items-center gap-2">
+            <UserCheck className="w-5 h-5 text-green-400" />
+            Assigned Reviewers
+          </h3>
+          <div className="flex flex-wrap gap-4">
+            {assignedReviewers.map(reviewer => (
+              <div key={reviewer.id} className="flex items-center gap-2 bg-gray-800 rounded px-3 py-2">
+                <img src={reviewer.avatar} alt={reviewer.name} className="w-8 h-8 rounded-full object-cover" />
+                <span className="text-white font-medium">{reviewer.name}</span>
+                <button
+                  onClick={() => handleUnassignReviewer(reviewer.id)}
+                  className="ml-2 px-2 py-1 text-xs bg-red-700 text-white rounded hover:bg-red-800"
+                >
+                  Unassign
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

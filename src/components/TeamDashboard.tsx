@@ -94,23 +94,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
     topPerformers: teamMembers.sort((a, b) => b.stats.codeQualityScore - a.stats.codeQualityScore).slice(0, 3)
   };
 
-  const handleInviteToSession = (memberId: string) => {
-    if (onInviteToSession) {
-      onInviteToSession(memberId);
-    }
-    if (onNotification) {
-      const member = teamMembers.find(m => m.id === memberId);
-      onNotification(`Invited ${member?.name} to live session`);
-    }
-  };
-
-  const handleStartChat = (memberId: string) => {
-    const member = teamMembers.find(m => m.id === memberId);
-    if (onNotification) {
-      onNotification(`Started chat with ${member?.name}`);
-    }
-  };
-
   const handleExportReport = () => {
     if (onNotification) {
       onNotification('Team report exported successfully');
@@ -270,22 +253,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                       {member.stats.reviewsCompleted} reviews • {member.stats.codeQualityScore} avg score
                     </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleStartChat(member.id)}
-                      className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                      title="Start chat"
-                    >
-                      <MessageCircle className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleInviteToSession(member.id)}
-                      className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                      title="Invite to live session"
-                    >
-                      <Video className="w-4 h-4" />
-                    </button>
-                  </div>
                   <div className="text-right">
                     <div className="text-lg font-bold text-green-400">{member.stats.codeQualityScore}</div>
                     <div className="text-xs text-gray-400">Quality Score</div>
@@ -354,23 +321,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                         <div className="text-gray-400">Streak</div>
                         <div className="text-white font-medium">{member.activity.currentStreak} days</div>
                       </div>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <button
-                        onClick={() => handleStartChat(member.id)}
-                        className="flex items-center space-x-1 px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm"
-                      >
-                        <MessageCircle className="w-3 h-3" />
-                        <span>Chat</span>
-                      </button>
-                      <button
-                        onClick={() => handleInviteToSession(member.id)}
-                        className="flex items-center space-x-1 px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 transition-colors text-sm"
-                      >
-                        <Video className="w-3 h-3" />
-                        <span>Invite</span>
-                      </button>
                     </div>
                   </div>
                 </div>
