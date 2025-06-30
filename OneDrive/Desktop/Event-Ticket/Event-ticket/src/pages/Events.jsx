@@ -8,7 +8,7 @@ const dummyEvents = [
     date: "2024-07-15",
     location: "City Hall",
     description: "A night of amazing live music!",
-    image: "https://images.unsplash.com/photo-1464983953574-0892a716854b?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?auto=format&fit=crop&w=900&q=80",
     category: "Music",
     badge: "Popular"
   },
@@ -18,7 +18,7 @@ const dummyEvents = [
     date: "2024-08-01",
     location: "Art Gallery",
     description: "Explore the latest in modern art.",
-    image: "https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1531058020387-3be344556be6?auto=format&fit=crop&w=900&q=80",
     category: "Art",
     badge: "New"
   },
@@ -28,7 +28,7 @@ const dummyEvents = [
     date: "2024-09-10",
     location: "Convention Center",
     description: "Join industry leaders in tech innovation.",
-    image: "https://images.unsplash.com/photo-1519389950473-47ba0277781c?auto=format&fit=crop&w=600&q=80",
+    image: "https://images.unsplash.com/photo-1540575467063-178a50c2df87?auto=format&fit=crop&w=900&q=80",
     category: "Tech",
     badge: "Sold Out"
   },
