@@ -61,6 +61,22 @@ interface LiveSession {
   isActive: boolean;
 }
 
+// ErrorBoundary for catching errors in tab content
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error: any, info: any) { console.error(error, info); }
+  render() {
+    if (this.state.hasError) {
+      return <div className="bg-red-900 text-white p-8 rounded-lg text-center">Something went wrong. Please refresh the page.</div>;
+    }
+    return this.props.children;
+  }
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'review' | 'metrics' | 'performance' | 'rules' | 'comparison' | 'chat' | 'team' | 'live' | 'assignment' | 'history' | 'settings'>('review');
   const [code, setCode] = useState('');
@@ -592,79 +608,81 @@ function App() {
             </div>
 
             {/* Tab Content */}
-            {activeTab === 'review' && (
-              <ReviewPanel 
-                analysis={analysis} 
-                isAnalyzing={isAnalyzing} 
-                onAutoFix={applyAutoFix}
-              />
-            )}
-            {activeTab === 'team' && (
-              <TeamDashboard 
-                teamMembers={teamMembers}
-                onInviteToSession={inviteToSession}
-                onNotification={addNotification}
-              />
-            )}
-            {activeTab === 'live' && (
-              <LiveReviewSession 
-                sessionId={liveSession.id}
-                codeContent={code}
-                onCodeChange={setCode}
-                participants={liveSession.participants}
-                isActive={liveSession.isActive}
-                onStartSession={startLiveSession}
-                onEndSession={endLiveSession}
-                onNotification={addNotification}
-              />
-            )}
-            {activeTab === 'assignment' && (
-              <ReviewerAssignment 
-                teamMembers={teamMembers}
-                onAssign={(reviewers) => addNotification(`Assigned reviewers: ${reviewers.join(', ')}`)}
-              />
-            )}
-            {activeTab === 'history' && (
-              <ReviewHistory 
-                onExport={() => addNotification('Review history exported successfully')}
-              />
-            )}
-            {activeTab === 'performance' && (
-              <PerformancePanel 
-                analysis={analysis}
-                onOptimize={(suggestion) => addNotification(`Applied optimization: ${suggestion}`)}
-              />
-            )}
-            {activeTab === 'metrics' && (
-              <MetricsPanel 
-                analysis={analysis}
-                onMetricClick={(metric) => addNotification(`Viewing details for ${metric}`)}
-              />
-            )}
-            {activeTab === 'rules' && (
-              <CustomRulesPanel 
-                onRulesChange={handleCustomRulesChange}
-                onRuleTest={(result) => addNotification(`Rule test: ${result}`)}
-              />
-            )}
-            {activeTab === 'comparison' && (
-              <CodeComparison 
-                analysis={analysis}
-                onCopy={() => addNotification('Code copied to clipboard')}
-              />
-            )}
-            {activeTab === 'chat' && (
-              <AIChat 
-                analysis={analysis} 
-                code={code}
-                onSuggestionApply={(suggestion) => addNotification(`Applied AI suggestion: ${suggestion}`)}
-              />
-            )}
-            {activeTab === 'settings' && (
-              <SettingsPanel 
-                onSettingChange={(setting, value) => addNotification(`${setting} updated to ${value}`)}
-              />
-            )}
+            <ErrorBoundary>
+              {activeTab === 'review' && (
+                <ReviewPanel 
+                  analysis={analysis} 
+                  isAnalyzing={isAnalyzing} 
+                  onAutoFix={applyAutoFix}
+                />
+              )}
+              {activeTab === 'team' && (
+                <TeamDashboard 
+                  teamMembers={teamMembers}
+                  onInviteToSession={inviteToSession}
+                  onNotification={addNotification}
+                />
+              )}
+              {activeTab === 'live' && (
+                <LiveReviewSession 
+                  sessionId={liveSession.id}
+                  codeContent={code}
+                  onCodeChange={setCode}
+                  participants={liveSession.participants}
+                  isActive={liveSession.isActive}
+                  onStartSession={startLiveSession}
+                  onEndSession={endLiveSession}
+                  onNotification={addNotification}
+                />
+              )}
+              {activeTab === 'assignment' && (
+                <ReviewerAssignment 
+                  teamMembers={teamMembers}
+                  onAssign={(reviewers) => addNotification(`Assigned reviewers: ${reviewers.join(', ')}`)}
+                />
+              )}
+              {activeTab === 'history' && (
+                <ReviewHistory 
+                  onExport={() => addNotification('Review history exported successfully')}
+                />
+              )}
+              {activeTab === 'performance' && (
+                <PerformancePanel 
+                  analysis={analysis}
+                  onOptimize={(suggestion) => addNotification(`Applied optimization: ${suggestion}`)}
+                />
+              )}
+              {activeTab === 'metrics' && (
+                <MetricsPanel 
+                  analysis={analysis}
+                  onMetricClick={(metric) => addNotification(`Viewing details for ${metric}`)}
+                />
+              )}
+              {activeTab === 'rules' && (
+                <CustomRulesPanel 
+                  onRulesChange={handleCustomRulesChange}
+                  onRuleTest={(result) => addNotification(`Rule test: ${result}`)}
+                />
+              )}
+              {activeTab === 'comparison' && (
+                <CodeComparison 
+                  analysis={analysis}
+                  onCopy={() => addNotification('Code copied to clipboard')}
+                />
+              )}
+              {activeTab === 'chat' && (
+                <AIChat 
+                  analysis={analysis} 
+                  code={code}
+                  onSuggestionApply={(suggestion) => addNotification(`Applied AI suggestion: ${suggestion}`)}
+                />
+              )}
+              {activeTab === 'settings' && (
+                <SettingsPanel 
+                  onSettingChange={(setting, value) => addNotification(`${setting} updated to ${value}`)}
+                />
+              )}
+            </ErrorBoundary>
           </div>
         </div>
       </main>

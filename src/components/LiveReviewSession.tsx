@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Video, Mic, MicOff, VideoOff, Users, MessageSquare, Share, Settings, Phone, UserPlus, Play, Square } from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, updateDoc, arrayUnion, collection, addDoc, query, where, orderBy, serverTimestamp } from 'firebase/firestore';
 
 interface Participant {
   id: string;
@@ -33,6 +35,22 @@ interface LiveReviewSessionProps {
   onNotification?: (message: string) => void;
 }
 
+const firebaseConfig = {
+  apiKey: "AIzaSyCESdNqE4J3FfVVFJTmyFEK1lJmB-tEPMI",
+  authDomain: "project-70cbf.firebaseapp.com",
+  databaseURL: "https://project-70cbf-default-rtdb.firebaseio.com",
+  projectId: "project-70cbf",
+  storageBucket: "project-70cbf.firebasestorage.app",
+  messagingSenderId: "266192526810",
+  appId: "1:266192526810:web:db8a75abeb35cc505a34e3"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// WebRTC helpers
+const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
+
 export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({ 
   sessionId, 
   codeContent, 
@@ -43,39 +61,8 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
   onEndSession,
   onNotification
 }) => {
-  const [participants, setParticipants] = useState<Participant[]>(propParticipants || [
-    {
-      id: '1',
-      name: 'Sarah Chen',
-      avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'reviewer',
-      isVideoOn: true,
-      isAudioOn: true,
-      isPresenting: false,
-      isOnline: true
-    },
-    {
-      id: '2',
-      name: 'Marcus Johnson',
-      avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'author',
-      isVideoOn: true,
-      isAudioOn: true,
-      isPresenting: true,
-      isOnline: true
-    }
-  ]);
-
-  const [comments, setComments] = useState<LiveComment[]>([
-    {
-      id: '1',
-      author: participants[0],
-      content: 'This function could be optimized using memoization',
-      timestamp: new Date(Date.now() - 5 * 60 * 1000),
-      line: 15,
-      resolved: false
-    }
-  ]);
+  const [participants, setParticipants] = useState<Participant[]>(propParticipants || []);
+  const [comments, setComments] = useState<LiveComment[]>([]);
 
   const [isVideoOn, setIsVideoOn] = useState(true);
   const [isAudioOn, setIsAudioOn] = useState(true);
@@ -85,75 +72,267 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
   const [showParticipants, setShowParticipants] = useState(true);
   const [showChat, setShowChat] = useState(true);
   const [isSessionActive, setIsSessionActive] = useState(propIsActive || false);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   const codeRef = useRef<HTMLTextAreaElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
+  // Generate a random user for this session (in real app, use auth)
+  const [currentUser] = useState(() => ({
+    id: Math.random().toString(36).substring(2, 10),
+    name: 'Immaculate Muli',
+    avatar: 'https://ui-avatars.com/api/?name=Immaculate+Muli&background=random',
+    role: 'reviewer',
+    isVideoOn: true,
+    isAudioOn: true,
+    isPresenting: false,
+    isOnline: true
+  }));
+
+  const [remoteStreams, setRemoteStreams] = useState<{ [id: string]: MediaStream }>({});
+  const peerConnections = useRef<{ [id: string]: RTCPeerConnection }>({});
+  const signalingUnsubs = useRef<(() => void)[]>([]);
+
+  // Firestore listeners for participants and comments
   useEffect(() => {
-    if (chatRef.current) {
-      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const participantsRef = collection(sessionRef, 'participants');
+    const commentsRef = collection(sessionRef, 'comments');
+
+    // Add self to participants on join
+    setDoc(doc(participantsRef, currentUser.id), {
+      ...currentUser,
+      joinedAt: serverTimestamp(),
+    }, { merge: true });
+
+    // Listen for participants
+    const unsubParticipants = onSnapshot(participantsRef, (snapshot) => {
+      setParticipants(snapshot.docs.map(doc => doc.data() as Participant));
+    });
+
+    // Listen for comments
+    const q = query(commentsRef, orderBy('timestamp', 'asc'));
+    const unsubComments = onSnapshot(q, (snapshot) => {
+      setComments(snapshot.docs.map(doc => ({ ...doc.data(), timestamp: doc.data().timestamp?.toDate?.() || new Date() }) as LiveComment));
+    });
+
+    // Cleanup on unmount
+    return () => {
+      unsubParticipants();
+      unsubComments();
+      // Optionally: set self offline or remove from participants
+    };
+  }, [sessionId, currentUser.id]);
+
+  // WebRTC: Setup local media and signaling
+  useEffect(() => {
+    let localStream: MediaStream | null = null;
+    let unsubSignals: (() => void)[] = [];
+    let isMounted = true;
+    let currentStreamType: 'camera' | 'screen' = 'camera';
+
+    async function setup() {
+      // 1. Get local media
+      localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = localStream;
+      }
+      // 2. Listen for new participants
+      const sessionRef = doc(db, 'sessions', sessionId);
+      const participantsRef = collection(sessionRef, 'participants');
+      const signalsRef = collection(sessionRef, 'signals');
+
+      // 3. For each other participant, create a peer connection
+      const unsub = onSnapshot(participantsRef, async (snapshot) => {
+        const others = snapshot.docs.map(doc => doc.data()).filter((p: any) => p.id !== currentUser.id);
+        for (const other of others) {
+          if (!peerConnections.current[other.id]) {
+            // Create peer connection
+            const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+            peerConnections.current[other.id] = pc;
+            // Add local tracks
+            localStream!.getTracks().forEach(track => pc.addTrack(track, localStream!));
+            // Handle remote stream
+            pc.ontrack = (event) => {
+              if (!isMounted) return;
+              setRemoteStreams(prev => ({ ...prev, [other.id]: event.streams[0] }));
+            };
+            // ICE candidates
+            pc.onicecandidate = (event) => {
+              if (event.candidate) {
+                addDoc(signalsRef, {
+                  from: currentUser.id,
+                  to: other.id,
+                  type: 'ice',
+                  candidate: event.candidate.toJSON(),
+                  timestamp: Date.now()
+                });
+              }
+            };
+            // Create offer
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            addDoc(signalsRef, {
+              from: currentUser.id,
+              to: other.id,
+              type: 'offer',
+              sdp: offer.sdp,
+              timestamp: Date.now()
+            });
+          }
+        }
+      });
+      unsubSignals.push(unsub);
+      // 4. Listen for incoming signals
+      const q = query(signalsRef, where('to', '==', currentUser.id));
+      const unsubSignal = onSnapshot(q, async (snapshot) => {
+        for (const docSnap of snapshot.docs) {
+          const data = docSnap.data();
+          const fromId = data.from;
+          let pc = peerConnections.current[fromId];
+          if (!pc) {
+            pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+            peerConnections.current[fromId] = pc;
+            localStream!.getTracks().forEach(track => pc.addTrack(track, localStream!));
+            pc.ontrack = (event) => {
+              if (!isMounted) return;
+              setRemoteStreams(prev => ({ ...prev, [fromId]: event.streams[0] }));
+            };
+            pc.onicecandidate = (event) => {
+              if (event.candidate) {
+                addDoc(signalsRef, {
+                  from: currentUser.id,
+                  to: fromId,
+                  type: 'ice',
+                  candidate: event.candidate.toJSON(),
+                  timestamp: Date.now()
+                });
+              }
+            };
+          }
+          if (data.type === 'offer') {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: data.sdp }));
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            addDoc(signalsRef, {
+              from: currentUser.id,
+              to: fromId,
+              type: 'answer',
+              sdp: answer.sdp,
+              timestamp: Date.now()
+            });
+          } else if (data.type === 'answer') {
+            await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: data.sdp }));
+          } else if (data.type === 'ice' && data.candidate) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) {}
+          }
+        }
+      });
+      unsubSignals.push(unsubSignal);
     }
-  }, [comments]);
+    setup();
+    signalingUnsubs.current = unsubSignals;
+    return () => {
+      isMounted = false;
+      unsubSignals.forEach(unsub => unsub());
+      Object.values(peerConnections.current).forEach(pc => pc.close());
+      peerConnections.current = {};
+      setRemoteStreams({});
+      if (localStream) localStream.getTracks().forEach(track => track.stop());
+      if (videoRef.current && videoRef.current.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(track => track.stop());
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [sessionId, currentUser.id]);
 
-  const handleAddComment = () => {
+  // Screen sharing (Presenting)
+  const startPresenting = async () => {
+    if (!isSessionActive) return;
+    try {
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      // Replace video track in all peer connections
+      Object.values(peerConnections.current).forEach(pc => {
+        const senders = pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+        if (senders[0]) senders[0].replaceTrack(screenStream.getVideoTracks()[0]);
+      });
+      // Show screen in local video
+      if (videoRef.current) videoRef.current.srcObject = screenStream;
+      // When screen sharing stops, revert to camera
+      screenStream.getVideoTracks()[0].onended = async () => {
+        await stopPresenting();
+      };
+      setIsPresenting(true);
+    } catch (e) {}
+  };
+
+  const stopPresenting = async () => {
+    // Switch back to camera
+    const cameraStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    Object.values(peerConnections.current).forEach(pc => {
+      const senders = pc.getSenders().filter(s => s.track && s.track.kind === 'video');
+      if (senders[0]) senders[0].replaceTrack(cameraStream.getVideoTracks()[0]);
+    });
+    if (videoRef.current) videoRef.current.srcObject = cameraStream;
+    setIsPresenting(false);
+  };
+
+  // Mute/unmute audio
+  const toggleAudio = () => {
+    setIsAudioOn(a => {
+      if (videoRef.current && videoRef.current.srcObject) {
+        const stream = videoRef.current.srcObject as MediaStream;
+        stream.getAudioTracks().forEach(track => (track.enabled = !a));
+      }
+      updateSelf({ isAudioOn: !a });
+      return !a;
+    });
+  };
+
+  // Presenting button handler
+  const handlePresenting = () => {
+    if (isPresenting) {
+      stopPresenting();
+    } else {
+      startPresenting();
+    }
+    updateSelf({ isPresenting: !isPresenting });
+  };
+
+  // Add comment to Firestore
+  const handleAddComment = async () => {
     if (!newComment.trim()) return;
-
-    const comment: LiveComment = {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const commentsRef = collection(sessionRef, 'comments');
+    await addDoc(commentsRef, {
       id: Date.now().toString(),
-      author: participants[0], // Current user
+      author: currentUser,
       content: newComment,
       timestamp: new Date(),
       line: selectedLine || undefined,
       resolved: false
-    };
-
-    setComments(prev => [...prev, comment]);
+    });
     setNewComment('');
     setSelectedLine(null);
-    
-    if (onNotification) {
-      onNotification(`Added comment: ${newComment.substring(0, 30)}...`);
-    }
   };
 
-  const handleResolveComment = (commentId: string) => {
-    setComments(prev => prev.map(comment => 
-      comment.id === commentId 
-        ? { ...comment, resolved: !comment.resolved }
-        : comment
-    ));
-    
-    if (onNotification) {
-      onNotification('Comment status updated');
-    }
-  };
-
-  const handleLineClick = (lineNumber: number) => {
-    setSelectedLine(lineNumber);
-    if (onNotification) {
-      onNotification(`Selected line ${lineNumber} for comment`);
-    }
+  // Update participant state in Firestore
+  const updateSelf = async (fields: Partial<Participant>) => {
+    const sessionRef = doc(db, 'sessions', sessionId);
+    const participantsRef = collection(sessionRef, 'participants');
+    await updateDoc(doc(participantsRef, currentUser.id), fields);
   };
 
   const toggleVideo = () => {
-    setIsVideoOn(!isVideoOn);
-    if (onNotification) {
-      onNotification(`Video ${!isVideoOn ? 'enabled' : 'disabled'}`);
-    }
-  };
-
-  const toggleAudio = () => {
-    setIsAudioOn(!isAudioOn);
-    if (onNotification) {
-      onNotification(`Audio ${!isAudioOn ? 'enabled' : 'disabled'}`);
-    }
-  };
-
-  const togglePresenting = () => {
-    setIsPresenting(!isPresenting);
-    if (onNotification) {
-      onNotification(`${!isPresenting ? 'Started' : 'Stopped'} presenting`);
-    }
+    setIsVideoOn(v => {
+      updateSelf({ isVideoOn: !v });
+      return !v;
+    });
   };
 
   const handleStartSession = () => {
@@ -177,15 +356,157 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
   };
 
   const inviteParticipant = () => {
+    // Generate a link with the sessionId in the URL
+    const url = `${window.location.origin}${window.location.pathname}?session=${sessionId}`;
+    setInviteLink(url);
+    setShowInviteModal(true);
+    // Copy to clipboard
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(url);
+    }
     if (onNotification) {
-      onNotification('Invitation sent to team members');
+      onNotification('Invite link copied to clipboard!');
     }
   };
 
   const codeLines = codeContent.split('\n');
 
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [comments]);
+
+  useEffect(() => {
+    if (isVideoOn && isSessionActive) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        .then(stream => {
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play();
+          }
+          localStreamRef.current = stream;
+        })
+        .catch(err => {
+          if (onNotification) onNotification('Could not access webcam: ' + err.message);
+        });
+    } else {
+      // Stop the video stream if it exists
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    }
+    // Cleanup on unmount
+    return () => {
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => track.stop());
+        localStreamRef.current = null;
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [isVideoOn, isSessionActive]);
+
+  const handleResolveComment = (commentId: string) => {
+    setComments(prev => prev.map(comment => 
+      comment.id === commentId 
+        ? { ...comment, resolved: !comment.resolved }
+        : comment
+    ));
+    
+    if (onNotification) {
+      onNotification('Comment status updated');
+    }
+  };
+
+  const handleLineClick = (lineNumber: number) => {
+    setSelectedLine(lineNumber);
+    if (onNotification) {
+      onNotification(`Selected line ${lineNumber} for comment`);
+    }
+  };
+
+  // Settings modal state
+  const [showSettings, setShowSettings] = useState(false);
+  const [displayName, setDisplayName] = useState(currentUser.name);
+  const [darkMode, setDarkMode] = useState(false);
+
+  const handleSaveSettings = () => {
+    // Optionally update display name in Firestore
+    setShowSettings(false);
+    // Optionally: set dark mode globally
+  };
+
   return (
     <div className="bg-gray-800 rounded-lg overflow-hidden h-[600px] flex">
+      {/* Invite Modal */}
+      {showInviteModal && inviteLink && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-lg max-width-md w-full text-center">
+            <h2 className="text-lg font-bold mb-2 text-gray-900">Share this meeting link</h2>
+            <input
+              type="text"
+              value={inviteLink}
+              readOnly
+              className="w-full p-2 border border-gray-300 rounded mb-4 text-gray-800"
+              onFocus={e => e.target.select()}
+            />
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-2"
+              onClick={() => {
+                if (navigator.clipboard) navigator.clipboard.writeText(inviteLink);
+              }}
+            >
+              Copy Link
+            </button>
+            <button
+              className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+              onClick={() => setShowInviteModal(false)}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Video Grid */}
+      <div className="absolute top-4 left-4 z-30 grid gap-4" style={{ gridTemplateColumns: `repeat(auto-fit, minmax(160px, 1fr))`, maxWidth: '90vw' }}>
+        {/* For each participant, show their video or avatar, name, and status */}
+        {[currentUser, ...participants.filter(p => p.id !== currentUser.id)].map(participant => {
+          const isLocal = participant.id === currentUser.id;
+          const remoteStream = remoteStreams[participant.id];
+          const showVideo = (isLocal && isVideoOn) || (!isLocal && participant.isVideoOn && remoteStream);
+          return (
+            <div key={participant.id} className="flex flex-col items-center bg-gray-900 rounded-lg p-2 shadow border border-gray-700 min-w-[160px]">
+              {showVideo ? (
+                <video
+                  ref={isLocal ? videoRef : (el => { if (el && remoteStream) el.srcObject = remoteStream; })}
+                  autoPlay
+                  muted={isLocal}
+                  playsInline
+                  className="w-36 h-28 rounded bg-black border border-gray-700 mb-1"
+                />
+              ) : (
+                <img
+                  src={participant.avatar}
+                  alt={participant.name}
+                  className="w-20 h-20 rounded-full object-cover bg-gray-700 mb-1"
+                />
+              )}
+              <div className="flex items-center gap-1 mt-1">
+                <span className="text-xs text-white font-medium truncate max-w-[80px]">{participant.name}</span>
+                {participant.isPresenting && <Share className="w-3 h-3 text-blue-400" />}
+                {!participant.isAudioOn && <MicOff className="w-3 h-3 text-red-400" />}
+                {!participant.isVideoOn && <VideoOff className="w-3 h-3 text-gray-400" />}
+              </div>
+            </div>
+          );
+        })}
+      </div>
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col">
         {/* Header */}
@@ -344,7 +665,6 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
               >
                 {isVideoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </button>
-              
               <button
                 onClick={toggleAudio}
                 disabled={!isSessionActive}
@@ -354,9 +674,8 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
               >
                 {isAudioOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
               </button>
-              
               <button
-                onClick={togglePresenting}
+                onClick={handlePresenting}
                 disabled={!isSessionActive}
                 className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-colors ${
                   isPresenting ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'
@@ -373,6 +692,7 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
                 className={`p-2 rounded-lg transition-colors ${
                   !isSessionActive ? 'opacity-50 cursor-not-allowed bg-gray-700' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
                 }`}
+                onClick={() => setShowSettings(true)}
               >
                 <Settings className="w-5 h-5" />
               </button>
@@ -429,37 +749,39 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
                 <span>Comments & Chat</span>
               </h3>
             </div>
-            
             <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-              {comments.map(comment => (
-                <div key={comment.id} className={`p-3 rounded-lg transition-all hover:bg-gray-700 ${
-                  comment.resolved ? 'bg-green-900/20 border border-green-700/30' : 'bg-gray-800'
-                }`}>
-                  <div className="flex items-center space-x-2 mb-1">
-                    <img
-                      src={comment.author.avatar}
-                      alt={comment.author.name}
-                      className="w-5 h-5 rounded-full"
-                    />
-                    <span className="text-sm text-white font-medium">{comment.author.name}</span>
-                    {comment.line && (
-                      <span className="text-xs text-blue-400">Line {comment.line}</span>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      {comment.timestamp.toLocaleTimeString()}
-                    </span>
+              {comments.length === 0 ? (
+                <div className="text-gray-500 text-center">No comments yet. Start the conversation!</div>
+              ) : (
+                comments.map(comment => (
+                  <div key={comment.id} className={`p-3 rounded-lg transition-all hover:bg-gray-700 ${
+                    comment.resolved ? 'bg-green-900/20 border border-green-700/30' : 'bg-gray-800'
+                  }`}>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <img
+                        src={comment.author.avatar}
+                        alt={comment.author.name}
+                        className="w-5 h-5 rounded-full"
+                      />
+                      <span className="text-sm text-white font-medium">{comment.author.name}</span>
+                      {comment.line && (
+                        <span className="text-xs text-blue-400">Line {comment.line}</span>
+                      )}
+                      <span className="text-xs text-gray-400">
+                        {comment.timestamp instanceof Date ? comment.timestamp.toLocaleTimeString() : ''}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-300">{comment.content}</p>
+                    <button
+                      onClick={() => handleResolveComment(comment.id)}
+                      className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition-colors"
+                    >
+                      {comment.resolved ? 'Reopen' : 'Resolve'}
+                    </button>
                   </div>
-                  <p className="text-sm text-gray-300">{comment.content}</p>
-                  <button
-                    onClick={() => handleResolveComment(comment.id)}
-                    className="text-xs text-blue-400 hover:text-blue-300 mt-1 transition-colors"
-                  >
-                    {comment.resolved ? 'Reopen' : 'Resolve'}
-                  </button>
-                </div>
-              ))}
+                ))
+              )}
             </div>
-            
             <div className="p-4 border-t border-gray-700">
               {selectedLine && (
                 <div className="mb-2 text-xs text-blue-400">
@@ -488,6 +810,44 @@ export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({
           </div>
         )}
       </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 shadow-lg max-w-md w-full text-center">
+            <h2 className="text-lg font-bold mb-2 text-gray-900">Settings</h2>
+            <div className="mb-4">
+              <label className="block text-gray-700 mb-1">Display Name</label>
+              <input
+                type="text"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded text-gray-800"
+              />
+            </div>
+            <div className="mb-4 flex items-center justify-center gap-2">
+              <label className="text-gray-700">Dark Mode</label>
+              <input
+                type="checkbox"
+                checked={darkMode}
+                onChange={e => setDarkMode(e.target.checked)}
+              />
+            </div>
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 mr-2"
+              onClick={handleSaveSettings}
+            >
+              Save
+            </button>
+            <button
+              className="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400"
+              onClick={() => setShowSettings(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
