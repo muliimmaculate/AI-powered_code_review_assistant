@@ -89,6 +89,20 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
+// Custom hook for notifications
+function useNotifications() {
+  const [notifications, setNotifications] = useState<string[]>([]);
+
+  const addNotification = (message: string) => {
+    setNotifications(prev => [...prev.slice(-4), message]);
+    setTimeout(() => {
+      setNotifications(prev => prev.slice(1));
+    }, 5000);
+  };
+
+  return { notifications, addNotification };
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState<'review' | 'metrics' | 'performance' | 'rules' | 'comparison' | 'chat' | 'team' | 'assignment' | 'history' | 'settings' | 'export'>('review');
   const [code, setCode] = useState('');
@@ -140,7 +154,8 @@ function App() {
     isActive: false
   });
 
-  const [notifications, setNotifications] = useState<string[]>([]);
+  // Replace notifications state and addNotification with the hook
+  const { notifications, addNotification } = useNotifications();
 
   // Define all tabs with their properties (removed templates)
   const allTabs = [
@@ -484,13 +499,6 @@ function App() {
     setActiveTab(tabId as any);
     setShowMoreMenu(false);
     addNotification(`Switched to ${allTabs.find(t => t.id === tabId)?.label} tab`);
-  };
-
-  const addNotification = (message: string) => {
-    setNotifications(prev => [...prev.slice(-4), message]);
-    setTimeout(() => {
-      setNotifications(prev => prev.slice(1));
-    }, 5000);
   };
 
   const startLiveSession = () => {
