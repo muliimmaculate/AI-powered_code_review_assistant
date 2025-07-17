@@ -2,16 +2,9 @@ import React, { useState } from 'react';
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewPanel } from './components/ReviewPanel';
-import { MetricsPanel } from './components/MetricsPanel';
 import { SettingsPanel } from './components/SettingsPanel';
-import { CodeComparison } from './components/CodeComparison';
 import { AIChat } from './components/AIChat';
-import { PerformancePanel } from './components/PerformancePanel';
-import { CustomRulesPanel } from './components/CustomRulesPanel';
-import { TeamDashboard } from './components/TeamDashboard';
-import { ReviewerAssignment } from './components/ReviewerAssignment';
-import { ReviewHistory } from './components/ReviewHistory';
-import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, BarChart3, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
+import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
 import { Routes, Route, useParams, Navigate } from 'react-router-dom';
 
 interface Issue {
@@ -104,7 +97,7 @@ function useNotifications() {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'review' | 'metrics' | 'performance' | 'rules' | 'comparison' | 'chat' | 'team' | 'assignment' | 'history' | 'settings' | 'export'>('review');
+  const [activeTab, setActiveTab] = useState<'review' | 'team' | 'assignment' | 'history' | 'settings' | 'chat'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -163,13 +156,8 @@ function App() {
     { id: 'team', label: 'Team', icon: Users, primary: true },
     { id: 'assignment', label: 'Assign', icon: UserCheck, primary: false },
     { id: 'history', label: 'History', icon: History, primary: false },
-    { id: 'performance', label: 'Performance', icon: Zap, primary: false },
-    { id: 'metrics', label: 'Metrics', icon: BarChart3, primary: false },
-    { id: 'rules', label: 'Rules', icon: Wrench, primary: false },
-    { id: 'comparison', label: 'Compare', icon: GitCompare, primary: false },
     { id: 'chat', label: 'AI Chat', icon: MessageSquare, primary: false },
-    { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false },
-    { id: 'export', label: 'Export', icon: Code, primary: false }
+    { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false }
   ];
 
   // Split tabs into primary (always visible) and secondary (in dropdown)
@@ -546,7 +534,7 @@ function App() {
       <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
           {/* Left Panel - Code Input (only show for certain tabs) */}
-          {['review', 'metrics', 'performance', 'rules', 'comparison', 'chat'].includes(activeTab) && (
+          {['review', 'team', 'assignment', 'chat'].includes(activeTab) && (
             <div className="space-y-4 sm:space-y-6">
               <CodeInput 
                 onAnalyze={handleCodeAnalysis} 
@@ -559,7 +547,7 @@ function App() {
 
           {/* Right Panel - Analysis Results */}
           <div className={`space-y-4 sm:space-y-6 ${
-            !['review', 'metrics', 'performance', 'rules', 'comparison', 'chat'].includes(activeTab) 
+            !['review', 'team', 'assignment', 'chat'].includes(activeTab) 
               ? 'xl:col-span-2' 
               : ''
           }`}>
@@ -661,23 +649,11 @@ function App() {
                   onExport={() => addNotification('Review history exported successfully')}
                 />
               )}
-              {activeTab === 'performance' && (
-                <PerformancePanel analysis={analysis} />
-              )}
-              {activeTab === 'metrics' && (
-                <MetricsPanel analysis={analysis} />
-              )}
-              {activeTab === 'rules' && (
-                <CustomRulesPanel onRulesChange={handleCustomRulesChange} />
-              )}
-              {activeTab === 'comparison' && (
-                <CodeComparison analysis={analysis} />
-              )}
               {activeTab === 'chat' && (
                 <AIChat analysis={analysis} code={code} />
               )}
               {activeTab === 'settings' && (
-                <SettingsPanel />
+                <SettingsPanel customRules={customRules} onRulesChange={handleCustomRulesChange} />
               )}
             </ErrorBoundary>
           </div>

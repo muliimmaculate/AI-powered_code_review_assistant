@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { Settings, Bell, Shield, Palette, Download } from 'lucide-react';
 
-export const SettingsPanel: React.FC = () => {
+interface SettingsPanelProps {
+  customRules: any[];
+  onRulesChange: (rules: any[]) => void;
+}
+
+const defaultNewRule = {
+  message: '',
+};
+
+export const SettingsPanel: React.FC<SettingsPanelProps> = ({ customRules, onRulesChange }) => {
+  // Local settings state (not persisted globally)
   const [settings, setSettings] = useState({
     autoAnalysis: true,
     notifications: true,
@@ -14,13 +24,49 @@ export const SettingsPanel: React.FC = () => {
     setSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  // Custom rules logic
+  const [newRule, setNewRule] = useState({ ...defaultNewRule });
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingValue, setEditingValue] = useState<any>(null);
+
+  const handleAddRule = () => {
+    if (newRule.message.trim()) {
+      onRulesChange([
+        ...customRules,
+        { message: newRule.message }
+      ]);
+      setNewRule({ ...defaultNewRule });
+    }
+  };
+
+  const handleDeleteRule = (idx: number) => {
+    const updated = customRules.filter((_, i) => i !== idx);
+    onRulesChange(updated);
+  };
+
+  const handleEditRule = (idx: number) => {
+    setEditingIndex(idx);
+    setEditingValue({ ...customRules[idx] });
+  };
+
+  const handleSaveEdit = (idx: number) => {
+    const updated = customRules.map((rule, i) => i === idx ? { ...editingValue } : rule);
+    onRulesChange(updated);
+    setEditingIndex(null);
+    setEditingValue(null);
+  };
+
+  const handleToggleRule = (idx: number) => {
+    const updated = customRules.map((rule, i) => i === idx ? { ...rule, enabled: !rule.enabled } : rule);
+    onRulesChange(updated);
+  };
+
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-gray-800 rounded-lg p-6 max-w-2xl mx-auto">
       <div className="flex items-center space-x-2 mb-6">
         <Settings className="w-5 h-5 text-white" />
         <h2 className="text-lg font-semibold text-white">Settings</h2>
       </div>
-
       <div className="space-y-6">
         {/* Analysis Settings */}
         <div>
@@ -36,18 +82,11 @@ export const SettingsPanel: React.FC = () => {
               </div>
               <button
                 onClick={() => updateSetting('autoAnalysis', !settings.autoAnalysis)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.autoAnalysis ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.autoAnalysis ? 'bg-blue-600' : 'bg-gray-600'}`}
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    settings.autoAnalysis ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.autoAnalysis ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
-
             <div className="flex items-center justify-between">
               <div>
                 <label className="text-sm text-gray-300">Strict mode</label>
@@ -55,18 +94,11 @@ export const SettingsPanel: React.FC = () => {
               </div>
               <button
                 onClick={() => updateSetting('strictMode', !settings.strictMode)}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                  settings.strictMode ? 'bg-blue-600' : 'bg-gray-600'
-                }`}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.strictMode ? 'bg-blue-600' : 'bg-gray-600'}`}
               >
-                <span
-                  className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                    settings.strictMode ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.strictMode ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
             </div>
-
             <div>
               <label className="text-sm text-gray-300 mb-2 block">Primary Language</label>
               <select
@@ -85,7 +117,6 @@ export const SettingsPanel: React.FC = () => {
             </div>
           </div>
         </div>
-
         {/* Notification Settings */}
         <div>
           <h3 className="text-sm font-medium text-white mb-3 flex items-center space-x-2">
@@ -99,19 +130,12 @@ export const SettingsPanel: React.FC = () => {
             </div>
             <button
               onClick={() => updateSetting('notifications', !settings.notifications)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                settings.notifications ? 'bg-blue-600' : 'bg-gray-600'
-              }`}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${settings.notifications ? 'bg-blue-600' : 'bg-gray-600'}`}
             >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  settings.notifications ? 'translate-x-6' : 'translate-x-1'
-                }`}
-              />
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${settings.notifications ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
           </div>
         </div>
-
         {/* Theme Settings */}
         <div>
           <h3 className="text-sm font-medium text-white mb-3 flex items-center space-x-2">
@@ -131,7 +155,6 @@ export const SettingsPanel: React.FC = () => {
             </select>
           </div>
         </div>
-
         {/* Export Settings */}
         <div>
           <h3 className="text-sm font-medium text-white mb-3 flex items-center space-x-2">
@@ -147,13 +170,38 @@ export const SettingsPanel: React.FC = () => {
             </button>
           </div>
         </div>
-
         {/* About */}
-        <div className="pt-4 border-t border-gray-700">
-          <div className="text-center text-sm text-gray-400">
-            <p>AI Code Review Assistant v1.0</p>
-            <p className="mt-1">Built with React & TypeScript</p>
+        {/* Custom Rules Section */}
+        <div className="bg-gray-900 rounded-lg p-4 mt-8">
+          <h3 className="text-lg font-medium text-white mb-4">Custom Code Analysis Rules</h3>
+          <div className="mb-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+            <input
+              type="text"
+              value={newRule.message}
+              onChange={e => setNewRule(n => ({ ...n, message: e.target.value }))}
+              placeholder="Message (required)"
+              className="px-2 py-1 rounded bg-gray-700 text-white text-sm col-span-2"
+            />
+            <button
+              onClick={handleAddRule}
+              className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 col-span-1"
+              disabled={!newRule.message.trim()}
+            >
+              Add Rule
+            </button>
           </div>
+          <ul className="space-y-2">
+            {customRules.length === 0 && (
+              <li className="text-gray-400 text-sm">No custom rules added yet.</li>
+            )}
+            {customRules.map((rule, idx) => (
+              <li key={idx} className="flex flex-col md:flex-row md:items-center gap-2 bg-gray-800 rounded p-2">
+                <div className="flex items-center gap-2 flex-1">
+                  <span className="flex-1 text-white">{rule.message}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </div>

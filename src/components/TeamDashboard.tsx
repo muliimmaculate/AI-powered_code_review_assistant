@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Users, TrendingUp, Clock, Star, GitBranch, Award, Target, Calendar, Filter, Download, UserPlus, MessageCircle, Video } from 'lucide-react';
+// Remove: import { useAuth } from '../AuthContext';
 
 interface TeamMember {
   id: string;
@@ -39,6 +40,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
   onInviteToSession,
   onNotification 
 }) => {
+  // Remove: const { teamMember } = useAuth();
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'reviews' | 'analytics'>('overview');
@@ -159,59 +161,60 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
   }
   return (
     <div className="bg-gray-800 rounded-lg p-6">
+      {/* Always show the add member form */}
       <form onSubmit={handleAddMember} className="mb-6 bg-gray-900 p-4 rounded-lg flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Name</label>
-          <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Email</label>
-          <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Avatar URL</label>
-          <input type="text" value={newMember.avatar} onChange={e => setNewMember(n => ({ ...n, avatar: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Role</label>
-          <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm">
-            <option value="developer">Developer</option>
-            <option value="senior">Senior</option>
-            <option value="lead">Lead</option>
-            <option value="architect">Architect</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Expertise (comma separated)</label>
-          <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Online?</label>
-          <input type="checkbox" checked={newMember.isOnline} onChange={e => setNewMember(n => ({ ...n, isOnline: e.target.checked }))} className="ml-2" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Phone</label>
-          <input type="text" value={newMember.phone} onChange={e => setNewMember(n => ({ ...n, phone: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Location</label>
-          <input type="text" value={newMember.location} onChange={e => setNewMember(n => ({ ...n, location: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Bio</label>
-          <input type="text" value={newMember.bio} onChange={e => setNewMember(n => ({ ...n, bio: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">LinkedIn URL</label>
-          <input type="text" value={newMember.linkedin} onChange={e => setNewMember(n => ({ ...n, linkedin: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Date Joined</label>
-          <input type="date" value={newMember.dateJoined} onChange={e => setNewMember(n => ({ ...n, dateJoined: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
-        </div>
-        <button type="submit" disabled={adding} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{adding ? 'Adding...' : 'Add Member'}</button>
-        {addError && <div className="text-red-400 text-xs ml-2">{addError}</div>}
-      </form>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Name</label>
+            <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Email</label>
+            <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Avatar URL</label>
+            <input type="text" value={newMember.avatar} onChange={e => setNewMember(n => ({ ...n, avatar: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Role</label>
+            <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm">
+              <option value="developer">Developer</option>
+              <option value="senior">Senior</option>
+              <option value="lead">Lead</option>
+              <option value="architect">Architect</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Expertise (comma separated)</label>
+            <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Online?</label>
+            <input type="checkbox" checked={newMember.isOnline} onChange={e => setNewMember(n => ({ ...n, isOnline: e.target.checked }))} className="ml-2" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Phone</label>
+            <input type="text" value={newMember.phone} onChange={e => setNewMember(n => ({ ...n, phone: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Location</label>
+            <input type="text" value={newMember.location} onChange={e => setNewMember(n => ({ ...n, location: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Bio</label>
+            <input type="text" value={newMember.bio} onChange={e => setNewMember(n => ({ ...n, bio: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">LinkedIn URL</label>
+            <input type="text" value={newMember.linkedin} onChange={e => setNewMember(n => ({ ...n, linkedin: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <div>
+            <label className="block text-xs text-gray-400 mb-1">Date Joined</label>
+            <input type="date" value={newMember.dateJoined} onChange={e => setNewMember(n => ({ ...n, dateJoined: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+          </div>
+          <button type="submit" disabled={adding} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{adding ? 'Adding...' : 'Add Member'}</button>
+          {addError && <div className="text-red-400 text-xs ml-2">{addError}</div>}
+        </form>
       <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
         <div className="flex items-center space-x-2">
           <Users className="w-5 h-5 text-white" />
