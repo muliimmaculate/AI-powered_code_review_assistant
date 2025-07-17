@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { AlertTriangle, AlertCircle, Info, CheckCircle, Copy, ExternalLink, Wrench, Check, Zap, X } from 'lucide-react';
+import { db } from '../firebase';
+import { doc, updateDoc } from 'firebase/firestore';
 
 interface Issue {
   id: number;
@@ -26,9 +28,10 @@ interface ReviewPanelProps {
   analysis: Analysis | null;
   isAnalyzing: boolean;
   onAutoFix: (issueId: number) => void;
+  sessionId: string; // <-- Add sessionId prop
 }
 
-export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAutoFix }) => {
+export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAutoFix, sessionId }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [fixedIssues, setFixedIssues] = useState<Set<number>>(new Set());
@@ -39,6 +42,21 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
   const [newComment, setNewComment] = useState<Record<number, string>>({});
   const [reviewFeedback, setReviewFeedback] = useState('');
   const [reviewStatus, setReviewStatus] = useState<'none' | 'approved' | 'changes_requested'>('none');
+
+  const persistReviewStatus = async (status: 'approved' | 'changes_requested', feedback: string) => {
+    if (!sessionId) return;
+    const sessionRef = doc(db, 'sessions', sessionId);
+    await updateDoc(sessionRef, {
+      reviewStatus: status,
+      reviewFeedback: feedback,
+      reviewUpdatedAt: new Date()
+    });
+  };
+
+  const handleSetReviewStatus = async (status: 'approved' | 'changes_requested') => {
+    setReviewStatus(status);
+    await persistReviewStatus(status, reviewFeedback);
+  };
 
   if (isAnalyzing) {
     return (
@@ -465,14 +483,14 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
         />
         <div className="flex gap-3">
           <button
-            onClick={() => setReviewStatus('approved')}
+            onClick={() => handleSetReviewStatus('approved')}
             className={`px-4 py-2 rounded font-medium text-sm transition-colors ${reviewStatus === 'approved' ? 'bg-green-700 text-white' : 'bg-green-600 text-white hover:bg-green-700'}`}
             disabled={reviewStatus !== 'none'}
           >
             {reviewStatus === 'approved' ? 'Approved ✓' : 'Approve'}
           </button>
           <button
-            onClick={() => setReviewStatus('changes_requested')}
+            onClick={() => handleSetReviewStatus('changes_requested')}
             className={`px-4 py-2 rounded font-medium text-sm transition-colors ${reviewStatus === 'changes_requested' ? 'bg-yellow-700 text-white' : 'bg-yellow-600 text-white hover:bg-yellow-700'}`}
             disabled={reviewStatus !== 'none'}
           >

@@ -643,6 +643,7 @@ function App() {
                   analysis={analysis} 
                   isAnalyzing={isAnalyzing} 
                   onAutoFix={applyAutoFix}
+                  sessionId={liveSession.id}
                 />
               )}
               {activeTab === 'team' && (
