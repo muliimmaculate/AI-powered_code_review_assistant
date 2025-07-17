@@ -5,6 +5,11 @@ import { collection, addDoc, Timestamp } from 'firebase/firestore';
 const OrganizationRegister: React.FC = () => {
   const [orgName, setOrgName] = useState('');
   const [contactEmail, setContactEmail] = useState('');
+  const [website, setWebsite] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [adminName, setAdminName] = useState('');
+  const [adminEmail, setAdminEmail] = useState('');
   const [message, setMessage] = useState('');
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState('');
@@ -12,14 +17,19 @@ const OrganizationRegister: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (!orgName.trim() || !contactEmail.trim()) {
-      setError('Organization name and contact email are required.');
+    if (!orgName.trim() || !contactEmail.trim() || !website.trim() || !phone.trim() || !address.trim() || !adminName.trim() || !adminEmail.trim()) {
+      setError('All fields except message are required.');
       return;
     }
     try {
       await addDoc(collection(db, 'pendingOrganizations'), {
         orgName,
         contactEmail,
+        website,
+        phone,
+        address,
+        adminName,
+        adminEmail,
         message,
         status: 'pending',
         createdAt: Timestamp.now(),
@@ -59,6 +69,56 @@ const OrganizationRegister: React.FC = () => {
           type="email"
           value={contactEmail}
           onChange={e => setContactEmail(e.target.value)}
+          className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          required
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1 font-medium">Website URL</label>
+        <input
+          type="url"
+          value={website}
+          onChange={e => setWebsite(e.target.value)}
+          className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          required
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1 font-medium">Phone Number</label>
+        <input
+          type="tel"
+          value={phone}
+          onChange={e => setPhone(e.target.value)}
+          className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          required
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1 font-medium">Address</label>
+        <input
+          type="text"
+          value={address}
+          onChange={e => setAddress(e.target.value)}
+          className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          required
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1 font-medium">Admin Full Name</label>
+        <input
+          type="text"
+          value={adminName}
+          onChange={e => setAdminName(e.target.value)}
+          className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
+          required
+        />
+      </div>
+      <div className="mb-4">
+        <label className="block mb-1 font-medium">Admin Email</label>
+        <input
+          type="email"
+          value={adminEmail}
+          onChange={e => setAdminEmail(e.target.value)}
           className="w-full p-2 rounded bg-gray-700 text-white border border-gray-600 focus:outline-none"
           required
         />

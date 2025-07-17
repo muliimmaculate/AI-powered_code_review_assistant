@@ -5,11 +5,15 @@ import { ReviewPanel } from './components/ReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
 import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
-import { Routes, Route, useParams, Navigate } from 'react-router-dom';
+import { Routes, Route, useParams, Navigate, useLocation } from 'react-router-dom';
 import { ReviewerAssignment } from './components/ReviewerAssignment';
 import OrganizationRegister from './components/OrganizationRegister';
 import LoginScreen from './components/LoginScreen';
 import { useAuth } from './AuthContext';
+import SuperadminOrgApproval from './components/SuperadminOrgApproval';
+import { db } from './firebase';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import SuperadminDashboard from './components/SuperadminDashboard';
 
 interface Issue {
   id: number;
@@ -101,13 +105,16 @@ function useNotifications() {
 }
 
 function App() {
-  const { user } = useAuth();
+  const { user, teamMember } = useAuth();
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState<'review' | 'team' | 'assignment' | 'history' | 'settings' | 'chat'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [customRules, setCustomRules] = useState<any[]>([]);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [orgStatus, setOrgStatus] = useState<'approved' | 'pending' | 'rejected' | null>(null);
+  const [checkingOrg, setCheckingOrg] = useState(false);
   
   // Interactive state management
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
@@ -565,8 +572,33 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    let unsub: (() => void) | undefined;
+    const listenOrgStatus = async () => {
+      if (user && teamMember && teamMember.orgName) {
+        setCheckingOrg(true);
+        const orgRef = doc(db, 'pendingOrganizations', teamMember.orgName);
+        unsub = onSnapshot(orgRef, (orgSnap) => {
+          if (orgSnap.exists()) {
+            setOrgStatus(orgSnap.data().status);
+          } else {
+            setOrgStatus(null);
+          }
+          setCheckingOrg(false);
+        });
+      }
+    };
+    listenOrgStatus();
+    return () => { if (unsub) unsub(); };
+  }, [user, teamMember]);
+
   // Check if active tab is in secondary tabs
   const activeTabInSecondary = secondaryTabs.find(tab => tab.id === activeTab);
+
+  // If the route is /superadmin, show the dashboard without authentication
+  if (location.pathname === '/superadmin') {
+    return <SuperadminDashboard />;
+  }
 
   if (!user) {
     return (
@@ -574,6 +606,23 @@ function App() {
         <Route path="/register-org" element={<OrganizationRegister />} />
         <Route path="/*" element={<LoginScreen />} />
       </Routes>
+    );
+  }
+
+  // If checking org status, show loading
+  if (checkingOrg) {
+    return <div className="text-center text-white mt-12">Checking organization approval status...</div>;
+  }
+
+  // If org is not approved, show waiting screen
+  if (orgStatus !== 'approved' && user.email !== 'muliimaculate@gmail.com') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="bg-gray-800 text-white rounded-lg p-8 w-full max-w-md shadow-lg text-center">
+          <h2 className="text-2xl font-bold mb-4">Waiting for Approval</h2>
+          <p>Your organization registration is pending approval by the superadmin. You will be notified once approved.</p>
+        </div>
+      </div>
     );
   }
 
