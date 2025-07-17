@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { collection, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../firebase';
 import { Users, TrendingUp, Clock, Star, GitBranch, Award, Target, Calendar, Filter, Download, UserPlus, MessageCircle, Video } from 'lucide-react';
 
 interface TeamMember {
@@ -20,6 +22,11 @@ interface TeamMember {
     totalContributions: number;
   };
   isOnline: boolean;
+  phone?: string;
+  location?: string;
+  bio?: string;
+  linkedin?: string;
+  dateJoined?: any;
 }
 
 interface TeamDashboardProps {
@@ -29,69 +36,93 @@ interface TeamDashboardProps {
 }
 
 export const TeamDashboard: React.FC<TeamDashboardProps> = ({ 
-  teamMembers: propTeamMembers,
   onInviteToSession,
   onNotification 
 }) => {
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter'>('week');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<'overview' | 'members' | 'reviews' | 'analytics'>('overview');
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Use prop team members or default data
-  const [teamMembers] = useState<TeamMember[]>(propTeamMembers || [
-    {
-      id: '1',
-      name: 'Sarah Chen',
-      email: 'sarah@company.com',
-      avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'lead',
-      expertise: ['React', 'TypeScript', 'Node.js', 'Architecture'],
-      stats: { reviewsCompleted: 45, codeQualityScore: 9.2, issuesFixed: 128, linesReviewed: 15420 },
-      activity: { lastActive: new Date(), currentStreak: 12, totalContributions: 234 },
-      isOnline: true
-    },
-    {
-      id: '2',
-      name: 'Marcus Johnson',
-      email: 'marcus@company.com',
-      avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'senior',
-      expertise: ['Python', 'Django', 'PostgreSQL', 'DevOps'],
-      stats: { reviewsCompleted: 38, codeQualityScore: 8.7, issuesFixed: 95, linesReviewed: 12300 },
-      activity: { lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), currentStreak: 8, totalContributions: 189 },
-      isOnline: true
-    },
-    {
-      id: '3',
-      name: 'Elena Rodriguez',
-      email: 'elena@company.com',
-      avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'developer',
-      expertise: ['Vue.js', 'JavaScript', 'CSS', 'UI/UX'],
-      stats: { reviewsCompleted: 29, codeQualityScore: 8.4, issuesFixed: 67, linesReviewed: 8900 },
-      activity: { lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), currentStreak: 5, totalContributions: 156 },
-      isOnline: false
-    },
-    {
-      id: '4',
-      name: 'David Kim',
-      email: 'david@company.com',
-      avatar: 'https://images.pexels.com/photos/1043471/pexels-photo-1043471.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'architect',
-      expertise: ['System Design', 'Microservices', 'AWS', 'Security'],
-      stats: { reviewsCompleted: 52, codeQualityScore: 9.5, issuesFixed: 145, linesReviewed: 18700 },
-      activity: { lastActive: new Date(Date.now() - 1 * 60 * 60 * 1000), currentStreak: 15, totalContributions: 298 },
-      isOnline: true
+  // State for new member form
+  const [newMember, setNewMember] = useState({
+    name: '',
+    email: '',
+    avatar: '',
+    role: 'developer',
+    expertise: '',
+    isOnline: false,
+    stats: { reviewsCompleted: 0, codeQualityScore: 0, issuesFixed: 0, linesReviewed: 0 },
+    activity: { lastActive: new Date(), currentStreak: 0, totalContributions: 0 },
+    phone: '',
+    location: '',
+    bio: '',
+    linkedin: '',
+    dateJoined: ''
+  });
+  const [addError, setAddError] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+
+  const handleAddMember = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAddError(null);
+    setAdding(true);
+    try {
+      await addDoc(collection(db, 'teamMembers'), {
+        ...newMember,
+        expertise: newMember.expertise.split(',').map(s => s.trim()).filter(Boolean),
+        activity: {
+          ...newMember.activity,
+          lastActive: Timestamp.fromDate(new Date()),
+        },
+        dateJoined: newMember.dateJoined ? Timestamp.fromDate(new Date(newMember.dateJoined)) : Timestamp.fromDate(new Date()),
+      });
+      setNewMember({
+        name: '',
+        email: '',
+        avatar: '',
+        role: 'developer',
+        expertise: '',
+        isOnline: false,
+        stats: { reviewsCompleted: 0, codeQualityScore: 0, issuesFixed: 0, linesReviewed: 0 },
+        activity: { lastActive: new Date(), currentStreak: 0, totalContributions: 0 },
+        phone: '',
+        location: '',
+        bio: '',
+        linkedin: '',
+        dateJoined: ''
+      });
+    } catch (err) {
+      setAddError('Failed to add member.');
     }
-  ]);
+    setAdding(false);
+  };
+
+  useEffect(() => {
+    setLoading(true);
+    const unsubscribe = onSnapshot(
+      collection(db, 'teamMembers'),
+      (snapshot) => {
+        setTeamMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember)));
+        setLoading(false);
+      },
+      (err) => {
+        setError('Failed to load team members.');
+        setLoading(false);
+      }
+    );
+    return () => unsubscribe();
+  }, []);
 
   const teamMetrics = {
-    averageQualityScore: teamMembers.reduce((sum, m) => sum + m.stats.codeQualityScore, 0) / teamMembers.length,
+    averageQualityScore: teamMembers.length > 0 ? teamMembers.reduce((sum, m) => sum + m.stats.codeQualityScore, 0) / teamMembers.length : 0,
     totalReviews: teamMembers.reduce((sum, m) => sum + m.stats.reviewsCompleted, 0),
     activeMembers: teamMembers.filter(m => m.isOnline).length,
     criticalIssuesResolved: teamMembers.reduce((sum, m) => sum + m.stats.issuesFixed, 0),
-    weeklyTrend: 12.5,
-    topPerformers: teamMembers.sort((a, b) => b.stats.codeQualityScore - a.stats.codeQualityScore).slice(0, 3)
+    weeklyTrend: 12.5, // Placeholder, can be calculated from real data if available
+    topPerformers: [...teamMembers].sort((a, b) => b.stats.codeQualityScore - a.stats.codeQualityScore).slice(0, 3)
   };
 
   const handleExportReport = () => {
@@ -120,8 +151,67 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
     return `${diffInDays}d ago`;
   };
 
+  if (loading) {
+    return <div className="bg-gray-800 rounded-lg p-6 text-white">Loading team members...</div>;
+  }
+  if (error) {
+    return <div className="bg-red-900 text-white p-6 rounded-lg">{error}</div>;
+  }
   return (
     <div className="bg-gray-800 rounded-lg p-6">
+      <form onSubmit={handleAddMember} className="mb-6 bg-gray-900 p-4 rounded-lg flex flex-wrap gap-4 items-end">
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Name</label>
+          <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Email</label>
+          <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Avatar URL</label>
+          <input type="text" value={newMember.avatar} onChange={e => setNewMember(n => ({ ...n, avatar: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Role</label>
+          <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm">
+            <option value="developer">Developer</option>
+            <option value="senior">Senior</option>
+            <option value="lead">Lead</option>
+            <option value="architect">Architect</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Expertise (comma separated)</label>
+          <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Online?</label>
+          <input type="checkbox" checked={newMember.isOnline} onChange={e => setNewMember(n => ({ ...n, isOnline: e.target.checked }))} className="ml-2" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Phone</label>
+          <input type="text" value={newMember.phone} onChange={e => setNewMember(n => ({ ...n, phone: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Location</label>
+          <input type="text" value={newMember.location} onChange={e => setNewMember(n => ({ ...n, location: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Bio</label>
+          <input type="text" value={newMember.bio} onChange={e => setNewMember(n => ({ ...n, bio: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">LinkedIn URL</label>
+          <input type="text" value={newMember.linkedin} onChange={e => setNewMember(n => ({ ...n, linkedin: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <div>
+          <label className="block text-xs text-gray-400 mb-1">Date Joined</label>
+          <input type="date" value={newMember.dateJoined} onChange={e => setNewMember(n => ({ ...n, dateJoined: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" />
+        </div>
+        <button type="submit" disabled={adding} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{adding ? 'Adding...' : 'Add Member'}</button>
+        {addError && <div className="text-red-400 text-xs ml-2">{addError}</div>}
+      </form>
       <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
         <div className="flex items-center space-x-2">
           <Users className="w-5 h-5 text-white" />
@@ -281,7 +371,6 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                       member.isOnline ? 'bg-green-400' : 'bg-gray-500'
                     }`}></div>
                   </div>
-                  
                   <div className="flex-1">
                     <div className="flex items-center space-x-2 mb-1">
                       <h3 className="text-white font-medium">{member.name}</h3>
@@ -290,21 +379,24 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
                       </span>
                     </div>
                     <p className="text-sm text-gray-400 mb-2">{member.email}</p>
-                    
+                    {member.phone && <p className="text-xs text-gray-400 mb-1">📞 {member.phone}</p>}
+                    {member.location && <p className="text-xs text-gray-400 mb-1">📍 {member.location}</p>}
+                    {member.bio && <p className="text-xs text-gray-400 mb-1">{member.bio}</p>}
+                    {member.linkedin && <p className="text-xs text-blue-400 mb-1"><a href={member.linkedin} target="_blank" rel="noopener noreferrer">LinkedIn</a></p>}
+                    {member.dateJoined && <p className="text-xs text-gray-400 mb-1">Joined: {new Date(member.dateJoined.seconds ? member.dateJoined.seconds * 1000 : member.dateJoined).toLocaleDateString()}</p>}
                     <div className="flex flex-wrap gap-1 mb-3">
-                      {member.expertise.slice(0, 3).map(skill => (
+                      {member.expertise && member.expertise.slice(0, 3).map((skill: string) => (
                         <span key={skill} className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded">
                           {skill}
                         </span>
                       ))}
-                      {member.expertise.length > 3 && (
+                      {member.expertise && member.expertise.length > 3 && (
                         <span className="text-xs px-2 py-1 bg-gray-800 text-gray-300 rounded">
                           +{member.expertise.length - 3} more
                         </span>
                       )}
                     </div>
-
-                    <div className="grid grid-cols-2 gap-4 text-sm mb-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                       <div>
                         <div className="text-gray-400">Reviews</div>
                         <div className="text-white font-medium">{member.stats.reviewsCompleted}</div>
