@@ -50,8 +50,9 @@ interface ReviewerAssignmentProps {
   onAssign?: (reviewers: string[]) => void;
 }
 
-export const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({ teamMembers: propTeamMembers, onAssign }) => {
-  const [developers] = useState<Developer[]>(propTeamMembers || [
+export const ReviewerAssignment: React.FC<ReviewerAssignmentProps & { theme: 'dark' | 'light' }> = (props) => {
+  const { theme, ...rest } = props;
+  const [developers] = useState<Developer[]>(rest.teamMembers || [
     {
       id: '1',
       name: 'Sarah Chen',
@@ -268,7 +269,7 @@ export const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({ teamMemb
     }
     setAssignedReviewers(assigned);
     setSelectedReviewers([]);
-    if (onAssign) onAssign(assigned.map(r => r.name));
+    if (rest.onAssign) rest.onAssign(assigned.map(r => r.name));
   };
 
   const handleUnassignReviewer = (id: string) => {
@@ -277,7 +278,7 @@ export const ReviewerAssignment: React.FC<ReviewerAssignmentProps> = ({ teamMemb
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className={`${theme === 'dark' ? 'bg-gray-800 text-white' : 'bg-white text-gray-900'} rounded-lg p-6`}>
       <div className="flex items-center space-x-2 mb-6">
         <Brain className="w-5 h-5 text-white" />
         <h2 className="text-lg font-semibold text-white">Smart Reviewer Assignment</h2>

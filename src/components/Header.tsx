@@ -8,7 +8,7 @@ export const Header: React.FC = () => {
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
-              <Code className="w-6 h-6" />
+              <Code className="w-6 h-6 text-white" />
             </div>
             <div>
               <h1 className="text-xl font-bold text-white">AI Code Review Assistant</h1>

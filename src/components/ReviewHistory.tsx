@@ -39,7 +39,8 @@ interface ReviewHistoryProps {
   onExport?: () => void;
 }
 
-export const ReviewHistory: React.FC<ReviewHistoryProps> = ({ onExport }) => {
+export const ReviewHistory: React.FC<ReviewHistoryProps> = (props) => {
+  const { onExport } = props;
   const [timeRange, setTimeRange] = useState<'week' | 'month' | 'quarter' | 'year'>('month');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [authorFilter, setAuthorFilter] = useState<string>('all');
@@ -263,7 +264,7 @@ export const ReviewHistory: React.FC<ReviewHistoryProps> = ({ onExport }) => {
   };
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-gray-800 text-white rounded-lg p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-2">
           <History className="w-5 h-5 text-white" />

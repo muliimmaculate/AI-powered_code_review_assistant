@@ -164,14 +164,12 @@ export const AIChat: React.FC<AIChatProps> = ({ analysis, code }) => {
   ];
 
   return (
-    <div className="bg-gray-800 rounded-lg p-4 sm:p-6 h-96 sm:h-[500px] flex flex-col">
+    <div className="bg-gray-800 text-white rounded-lg p-4 sm:p-6 h-96 sm:h-[500px] flex flex-col">
       <div className="flex items-center space-x-2 mb-4">
         <MessageCircle className="w-5 h-5 text-white" />
         <h2 className="text-lg font-semibold text-white">AI Code Assistant</h2>
         <div className="flex-1"></div>
-        <div className="text-xs text-gray-400">
-          {analysis ? `${analysis.issues.length} issues found` : 'No analysis yet'}
-        </div>
+        <div className="text-xs text-gray-400">{analysis ? `${analysis.issues.length} issues found` : 'No analysis yet'}</div>
       </div>
 
       {/* Messages */}
@@ -186,7 +184,7 @@ export const AIChat: React.FC<AIChatProps> = ({ analysis, code }) => {
                 <button
                   key={index}
                   onClick={() => handleSuggestionClick(action.action)}
-                  className="flex items-center space-x-2 p-2 bg-gray-700 rounded-lg hover:bg-gray-600 transition-colors text-sm"
+                  className="flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-600 transition-colors text-sm"
                   disabled={!analysis}
                 >
                   <action.icon className="w-4 h-4 text-blue-400" />
@@ -200,27 +198,17 @@ export const AIChat: React.FC<AIChatProps> = ({ analysis, code }) => {
         {messages.map(message => (
           <div key={message.id} className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex items-start space-x-2 max-w-[80%] ${message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${
-                message.type === 'user' ? 'bg-blue-600' : 'bg-green-600'
-              }`}>
-                {message.type === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-              </div>
-              <div className={`rounded-lg p-3 ${
-                message.type === 'user' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-gray-700 text-gray-100'
-              }`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${message.type === 'user' ? 'bg-blue-600' : 'bg-gray-300'}`}>{message.type === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-white" />}</div>
+              <div className={`rounded-lg p-3 ${message.type === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'}`}>
                 <div className="text-sm whitespace-pre-line">{message.content}</div>
-                <div className="text-xs opacity-75 mt-1">
-                  {message.timestamp.toLocaleTimeString()}
-                </div>
+                <div className="text-xs opacity-75 mt-1">{message.timestamp.toLocaleTimeString()}</div>
                 {message.suggestions && (
                   <div className="mt-3 space-y-1">
                     {message.suggestions.map((suggestion, index) => (
                       <button
                         key={index}
                         onClick={() => handleSuggestionClick(suggestion)}
-                        className="block w-full text-left text-xs p-2 bg-gray-600 hover:bg-gray-500 rounded transition-colors"
+                        className={`block w-full text-left text-xs p-2 rounded transition-colors ${theme === 'dark' ? 'bg-gray-600 hover:bg-gray-500 text-white' : 'bg-gray-200 hover:bg-gray-300 text-gray-900'}`}
                       >
                         {suggestion}
                       </button>
@@ -252,20 +240,20 @@ export const AIChat: React.FC<AIChatProps> = ({ analysis, code }) => {
       </div>
 
       {/* Input */}
-      <div className="flex space-x-2">
+      <div className="flex space-x-2 mt-2">
         <input
           type="text"
           value={inputMessage}
           onChange={(e) => setInputMessage(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
           placeholder="Ask me about your code..."
-          className="flex-1 p-3 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 p-3 rounded-lg text-sm focus:outline-none focus:ring-2 bg-gray-700 border border-gray-600 text-white focus:ring-blue-500"
           disabled={isTyping}
         />
         <button
           onClick={handleSendMessage}
           disabled={!inputMessage.trim() || isTyping}
-          className="px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="px-4 py-3 rounded-lg transition-colors bg-gray-800 text-white hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-4 h-4" />
         </button>

@@ -31,7 +31,7 @@ interface ReviewPanelProps {
   sessionId: string; // <-- Add sessionId prop
 }
 
-export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAutoFix, sessionId }) => {
+export const ReviewPanel: React.FC<ReviewPanelProps> = (props) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [expandedIssue, setExpandedIssue] = useState<number | null>(null);
   const [fixedIssues, setFixedIssues] = useState<Set<number>>(new Set());
@@ -44,8 +44,8 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
   const [reviewStatus, setReviewStatus] = useState<'none' | 'approved' | 'changes_requested'>('none');
 
   const persistReviewStatus = async (status: 'approved' | 'changes_requested', feedback: string) => {
-    if (!sessionId) return;
-    const sessionRef = doc(db, 'sessions', sessionId);
+    if (!props.sessionId) return;
+    const sessionRef = doc(db, 'sessions', props.sessionId);
     await updateDoc(sessionRef, {
       reviewStatus: status,
       reviewFeedback: feedback,
@@ -58,9 +58,9 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
     await persistReviewStatus(status, reviewFeedback);
   };
 
-  if (isAnalyzing) {
+  if (props.isAnalyzing) {
     return (
-      <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+      <div className="bg-gray-800 text-white rounded-lg p-4 sm:p-6">
         <div className="flex items-center justify-center h-48 sm:h-64">
           <div className="text-center">
             <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -72,9 +72,9 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
     );
   }
 
-  if (!analysis) {
+  if (!props.analysis) {
     return (
-      <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+      <div className="bg-gray-800 text-white rounded-lg p-4 sm:p-6">
         <div className="text-center py-8 sm:py-12">
           <CheckCircle className="w-8 sm:w-12 h-8 sm:h-12 text-gray-500 mx-auto mb-4" />
           <h3 className="text-base sm:text-lg font-medium text-gray-300 mb-2">Ready for Analysis</h3>
@@ -120,7 +120,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
     await new Promise(resolve => setTimeout(resolve, 800));
     
     // Apply the real fix
-    onAutoFix(issue.id);
+    props.onAutoFix(issue.id);
     setFixedIssues(prev => new Set([...prev, issue.id]));
     setIsFixing(null);
   };
@@ -152,10 +152,10 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
     return 'https://google.github.io/styleguide/jsguide.html';
   };
 
-  const categories = ['all', ...new Set(analysis.issues.map(issue => issue.category))];
+  const categories = ['all', ...new Set(props.analysis.issues.map(issue => issue.category))];
   const filteredIssues = selectedCategory === 'all' 
-    ? analysis.issues 
-    : analysis.issues.filter(issue => issue.category === selectedCategory);
+    ? props.analysis.issues 
+    : props.analysis.issues.filter(issue => issue.category === selectedCategory);
 
   const visibleIssues = filteredIssues.filter(issue => !fixedIssues.has(issue.id) && !ignoredIssues.has(issue.id));
   const fixedCount = filteredIssues.length - visibleIssues.length - filteredIssues.filter(issue => ignoredIssues.has(issue.id)).length;
@@ -163,14 +163,14 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
 
   return (
     <>
-      <div className="bg-gray-800 rounded-lg p-4 sm:p-6">
+      <div className="bg-gray-800 text-white rounded-lg p-4 sm:p-6">
         {/* Score and Summary */}
         <div className="mb-4 sm:mb-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
             <h2 className="text-base sm:text-lg font-semibold text-white">Code Review Results</h2>
             <div className="text-center sm:text-right">
-              <div className={`text-xl sm:text-2xl font-bold ${getScoreColor(analysis.score)}`}>
-                {analysis.score}/10
+              <div className={`text-xl sm:text-2xl font-bold ${getScoreColor(props.analysis.score)}`}>
+                {props.analysis.score}/10
               </div>
               <p className="text-xs sm:text-sm text-gray-400">Overall Score</p>
             </div>
@@ -179,19 +179,19 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
             <div className="text-center p-2 bg-gray-900 rounded">
               <div className="text-sm sm:text-lg font-semibold text-red-400">
-                {analysis.issues.filter(i => i.type === 'error' && !fixedIssues.has(i.id)).length}
+                {props.analysis.issues.filter(i => i.type === 'error' && !fixedIssues.has(i.id)).length}
               </div>
               <p className="text-xs text-gray-400">Errors</p>
             </div>
             <div className="text-center p-2 bg-gray-900 rounded">
               <div className="text-sm sm:text-lg font-semibold text-yellow-400">
-                {analysis.issues.filter(i => i.type === 'warning' && !fixedIssues.has(i.id)).length}
+                {props.analysis.issues.filter(i => i.type === 'warning' && !fixedIssues.has(i.id)).length}
               </div>
               <p className="text-xs text-gray-400">Warnings</p>
             </div>
             <div className="text-center p-2 bg-gray-900 rounded">
               <div className="text-sm sm:text-lg font-semibold text-blue-400">
-                {analysis.issues.filter(i => i.type === 'info' && !fixedIssues.has(i.id)).length}
+                {props.analysis.issues.filter(i => i.type === 'info' && !fixedIssues.has(i.id)).length}
               </div>
               <p className="text-xs text-gray-400">Suggestions</p>
             </div>
@@ -248,7 +248,7 @@ export const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing,
                 {category === 'all' ? 'All Issues' : category}
                 {category !== 'all' && (
                   <span className="ml-1 text-xs opacity-75">
-                    ({analysis.issues.filter(i => i.category === category && !fixedIssues.has(i.id)).length})
+                    ({props.analysis.issues.filter(i => i.category === category && !fixedIssues.has(i.id)).length})
                   </span>
                 )}
               </button>

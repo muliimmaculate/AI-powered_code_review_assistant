@@ -51,7 +51,8 @@ const db = getFirestore(app);
 // WebRTC helpers
 const ICE_SERVERS = [{ urls: 'stun:stun.l.google.com:19302' }];
 
-export const LiveReviewSession: React.FC<LiveReviewSessionProps> = ({ sessionId, ...props }) => {
+export const LiveReviewSession: React.FC<LiveReviewSessionProps & { theme: 'dark' | 'light' }> = (props) => {
+  const { theme, ...rest } = props;
   // Use sessionId for all Firebase/WebRTC room logic
   // Example: const roomRef = firebase.firestore().collection('sessions').doc(sessionId);
   const [participants, setParticipants] = useState<Participant[]>(props.participants || []);

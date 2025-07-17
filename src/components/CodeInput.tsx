@@ -15,7 +15,8 @@ interface UploadedFile {
   type: string;
 }
 
-export const CodeInput: React.FC<CodeInputProps> = ({ onAnalyze, isAnalyzing, code, setCode }) => {
+export const CodeInput: React.FC<CodeInputProps> = (props) => {
+  const { code, setCode, isAnalyzing, onAnalyze } = props;
   const [inputMethod, setInputMethod] = useState<'paste' | 'upload' | 'folder' | 'github'>('paste');
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -241,54 +242,23 @@ function processUserData(data) {
 }`;
 
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
+    <div className="bg-gray-800 text-white rounded-lg p-6">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-lg font-semibold text-white">Code Input</h2>
         <div className="flex space-x-1">
-          <button
-            onClick={() => setInputMethod('paste')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
-              inputMethod === 'paste'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            <FileText className="w-3 h-3 inline mr-1" />
-            Paste
-          </button>
-          <button
-            onClick={() => setInputMethod('upload')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
-              inputMethod === 'upload'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            <Upload className="w-3 h-3 inline mr-1" />
-            File
-          </button>
-          <button
-            onClick={() => setInputMethod('folder')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
-              inputMethod === 'folder'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            <Folder className="w-3 h-3 inline mr-1" />
-            Folder
-          </button>
-          <button
-            onClick={() => setInputMethod('github')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
-              inputMethod === 'github'
-                ? 'bg-blue-600 text-white'
-                : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-            }`}
-          >
-            <Link className="w-3 h-3 inline mr-1" />
-            GitHub
-          </button>
+          {['paste', 'upload', 'folder', 'github'].map(method => (
+            <button
+              key={method}
+              onClick={() => setInputMethod(method)}
+              className={`px-3 py-1 text-xs rounded-md transition-colors ${inputMethod === method ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'}`}
+            >
+              {method === 'paste' && <FileText className="w-3 h-3 inline mr-1" />}
+              {method === 'upload' && <Upload className="w-3 h-3 inline mr-1" />}
+              {method === 'folder' && <Folder className="w-3 h-3 inline mr-1" />}
+              {method === 'github' && <Link className="w-3 h-3 inline mr-1" />}
+              {method.charAt(0).toUpperCase() + method.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 

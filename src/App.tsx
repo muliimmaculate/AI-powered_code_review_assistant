@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewPanel } from './components/ReviewPanel';
@@ -6,6 +6,7 @@ import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
 import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
 import { Routes, Route, useParams, Navigate } from 'react-router-dom';
+import { ReviewerAssignment } from './components/ReviewerAssignment';
 
 interface Issue {
   id: number;
@@ -146,6 +147,18 @@ function App() {
     participants: teamMembers.filter(m => m.isOnline),
     isActive: false
   });
+
+  // Move settings state to App
+  const [settings, setSettings] = useState({
+    autoAnalysis: true,
+    notifications: true,
+    strictMode: false,
+    theme: 'dark',
+    language: 'javascript'
+  });
+  const handleSettingsChange = (key: string, value: any) => {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  };
 
   // Replace notifications state and addNotification with the hook
   const { notifications, addNotification } = useNotifications();
@@ -320,6 +333,21 @@ function App() {
             }
           });
 
+          // For each custom rule (which only has a message), add an issue with that message
+          customRules.forEach(rule => {
+            issues.push({
+              id: issueId++,
+              line: 1,
+              type: 'info',
+              severity: 'low',
+              category: 'Custom',
+              message: rule.message,
+              suggestion: '',
+              code: '',
+              canAutoFix: false
+            });
+          });
+
           // Documentation analysis
           const hasComments = codeContent.includes('//') || codeContent.includes('/*');
           const hasJSDoc = codeContent.includes('/**');
@@ -397,6 +425,29 @@ function App() {
           ));
 
           const overallScore = (maintainability + reliability + security + (coverage / 10) + documentation) / 5;
+
+          // Use strictMode to add stricter checks if enabled
+          if (settings.strictMode) {
+            // Example: warn if == is used anywhere
+            lines.forEach((line, index) => {
+              if (/[^=!]==[^=]/.test(line)) {
+                issues.push({
+                  id: issueId++,
+                  line: index + 1,
+                  type: 'warning',
+                  severity: 'medium',
+                  category: 'Strict Mode',
+                  message: 'Use of == is not allowed in strict mode',
+                  suggestion: 'Use === instead',
+                  code: line.trim(),
+                  canAutoFix: false
+                });
+              }
+            });
+          }
+
+          // Use settings.language if needed for future language-specific analysis
+          // For now, we'll just return the issues found.
 
           resolve({
             score: Math.round(overallScore * 10) / 10,
@@ -514,7 +565,7 @@ function App() {
   const activeTabInSecondary = secondaryTabs.find(tab => tab.id === activeTab);
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white">
+    <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
       <Header />
       
       {/* Notifications */}
@@ -641,9 +692,6 @@ function App() {
                   onNotification={addNotification}
                 />
               )}
-              {activeTab === 'assignment' && (
-                <ReviewerAssignment />
-              )}
               {activeTab === 'history' && (
                 <ReviewHistory 
                   onExport={() => addNotification('Review history exported successfully')}
@@ -653,7 +701,12 @@ function App() {
                 <AIChat analysis={analysis} code={code} />
               )}
               {activeTab === 'settings' && (
-                <SettingsPanel customRules={customRules} onRulesChange={handleCustomRulesChange} />
+                <SettingsPanel
+                  customRules={customRules}
+                  onRulesChange={handleCustomRulesChange}
+                  settings={settings}
+                  onSettingsChange={handleSettingsChange}
+                />
               )}
             </ErrorBoundary>
           </div>
