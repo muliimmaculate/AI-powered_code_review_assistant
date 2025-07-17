@@ -7,6 +7,9 @@ import { AIChat } from './components/AIChat';
 import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
 import { Routes, Route, useParams, Navigate } from 'react-router-dom';
 import { ReviewerAssignment } from './components/ReviewerAssignment';
+import OrganizationRegister from './components/OrganizationRegister';
+import LoginScreen from './components/LoginScreen';
+import { useAuth } from './AuthContext';
 
 interface Issue {
   id: number;
@@ -98,6 +101,7 @@ function useNotifications() {
 }
 
 function App() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'review' | 'team' | 'assignment' | 'history' | 'settings' | 'chat'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -564,6 +568,15 @@ function App() {
   // Check if active tab is in secondary tabs
   const activeTabInSecondary = secondaryTabs.find(tab => tab.id === activeTab);
 
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/register-org" element={<OrganizationRegister />} />
+        <Route path="/*" element={<LoginScreen />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
       <Header />
@@ -708,6 +721,9 @@ function App() {
                   onSettingsChange={handleSettingsChange}
                 />
               )}
+              {/* Add a route for organization registration */}
+              {/* Example: <Route path="/register-org" element={<OrganizationRegister />} /> */}
+              {/* Optionally, add a button or link to "/register-org" on the main page */}
             </ErrorBoundary>
           </div>
         </div>
