@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewPanel } from './components/ReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
 import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
-import { Routes, Route, useParams, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { ReviewerAssignment } from './components/ReviewerAssignment';
 import OrganizationRegister from './components/OrganizationRegister';
 import LoginScreen from './components/LoginScreen';
 import { useAuth } from './AuthContext';
 import SuperadminOrgApproval from './components/SuperadminOrgApproval';
 import { db } from './firebase';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { doc, getDoc, onSnapshot, getDocs, collection } from 'firebase/firestore';
 import SuperadminDashboard from './components/SuperadminDashboard';
 
 interface Issue {
@@ -105,8 +105,12 @@ function useNotifications() {
 }
 
 function App() {
-  const { user, teamMember } = useAuth();
+  const auth = useAuth();
+  const user = auth?.user;
+  const teamMember = auth?.teamMember;
+  const authLoading = auth?.authLoading;
   const location = useLocation();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'review' | 'team' | 'assignment' | 'history' | 'settings' | 'chat'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -115,6 +119,10 @@ function App() {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [orgStatus, setOrgStatus] = useState<'approved' | 'pending' | 'rejected' | null>(null);
   const [checkingOrg, setCheckingOrg] = useState(false);
+  const [showApprovalPopup, setShowApprovalPopup] = useState(false);
+  const [orgDocId, setOrgDocId] = useState<string | null>(() => localStorage.getItem('orgDocId'));
+  const [showRejection, setShowRejection] = useState(false);
+  const approvalTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // Interactive state management
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
@@ -573,236 +581,246 @@ function App() {
   };
 
   useEffect(() => {
-    let unsub: (() => void) | undefined;
-    const listenOrgStatus = async () => {
-      if (user && teamMember && teamMember.orgName) {
-        setCheckingOrg(true);
-        const orgRef = doc(db, 'pendingOrganizations', teamMember.orgName);
-        unsub = onSnapshot(orgRef, (orgSnap) => {
-          if (orgSnap.exists()) {
-            setOrgStatus(orgSnap.data().status);
-          } else {
-            setOrgStatus(null);
-          }
-          setCheckingOrg(false);
-        });
+    if (!orgDocId) return;
+    setCheckingOrg(true);
+    const orgRef = doc(db, 'pendingOrganizations', orgDocId);
+    const unsub = onSnapshot(orgRef, (orgSnap) => {
+      if (orgSnap.exists()) {
+        const newStatus = orgSnap.data().status;
+        if (orgStatus === 'pending' && newStatus === 'approved') {
+          setShowApprovalPopup(true);
+          if (approvalTimeoutRef.current) clearTimeout(approvalTimeoutRef.current);
+          approvalTimeoutRef.current = setTimeout(() => setShowApprovalPopup(false), 2500);
+        }
+        setOrgStatus(newStatus);
+        if (newStatus === 'rejected') setShowRejection(true);
+      } else {
+        setOrgStatus(null);
       }
-    };
-    listenOrgStatus();
-    return () => { if (unsub) unsub(); };
-  }, [user, teamMember]);
+      setCheckingOrg(false);
+    });
+    return () => { unsub(); if (approvalTimeoutRef.current) clearTimeout(approvalTimeoutRef.current); };
+  }, [orgDocId, orgStatus]);
 
-  // Check if active tab is in secondary tabs
-  const activeTabInSecondary = secondaryTabs.find(tab => tab.id === activeTab);
+  const handleReRegister = () => {
+    localStorage.removeItem('orgDocId');
+    setOrgDocId(null);
+    setOrgStatus(null);
+    setShowRejection(false);
+  };
 
-  // If the route is /superadmin, show the dashboard without authentication
+  // Always show SuperadminDashboard at /superadmin
   if (location.pathname === '/superadmin') {
     return <SuperadminDashboard />;
   }
 
-  if (!user) {
-    return (
-      <Routes>
-        <Route path="/register-org" element={<OrganizationRegister />} />
-        <Route path="/*" element={<LoginScreen />} />
-      </Routes>
-    );
+  if (!orgDocId) {
+    return <OrganizationRegister />;
   }
 
-  // If checking org status, show loading
   if (checkingOrg) {
     return <div className="text-center text-white mt-12">Checking organization approval status...</div>;
   }
 
-  // If org is not approved, show waiting screen
-  if (orgStatus !== 'approved' && user.email !== 'muliimaculate@gmail.com') {
+  if (orgStatus === 'pending') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-900">
         <div className="bg-gray-800 text-white rounded-lg p-8 w-full max-w-md shadow-lg text-center">
           <h2 className="text-2xl font-bold mb-4">Waiting for Approval</h2>
           <p>Your organization registration is pending approval by the superadmin. You will be notified once approved.</p>
         </div>
+        {showApprovalPopup && (
+          <div className="fixed top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-lg font-semibold">
+            Your organization has been approved! Redirecting...
+          </div>
+        )}
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
-      <Header />
-      
-      {/* Notifications */}
-      {notifications.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 space-y-2">
-          {notifications.map((notification, index) => (
-            <div
-              key={index}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slide-in-right"
-            >
-              {notification}
-            </div>
-          ))}
+  if (orgStatus === 'rejected' && showRejection) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-900">
+        <div className="bg-gray-800 text-white rounded-lg p-8 w-full max-w-md shadow-lg text-center">
+          <h2 className="text-2xl font-bold mb-4">Registration Rejected</h2>
+          <p>Your organization registration was rejected. Please contact support at <a href="mailto:support@example.com" className="underline text-blue-400">support@example.com</a>.</p>
+          <button onClick={handleReRegister} className="mt-6 px-6 py-2 bg-blue-600 rounded text-white font-semibold hover:bg-blue-700 transition-colors">Re-register</button>
         </div>
-      )}
-      
-      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
-          {/* Left Panel - Code Input (only show for certain tabs) */}
-          {['review', 'team', 'assignment', 'chat'].includes(activeTab) && (
-            <div className="space-y-4 sm:space-y-6">
-              <CodeInput 
-                onAnalyze={handleCodeAnalysis} 
-                isAnalyzing={isAnalyzing}
-                code={code}
-                setCode={setCode}
-              />
-            </div>
-          )}
+      </div>
+    );
+  }
 
-          {/* Right Panel - Analysis Results */}
-          <div className={`space-y-4 sm:space-y-6 ${
-            !['review', 'team', 'assignment', 'chat'].includes(activeTab) 
-              ? 'xl:col-span-2' 
-              : ''
-          }`}>
-            {/* Enhanced Tab Navigation */}
-            <div className="bg-gray-800 p-1 rounded-lg">
-              <div className="flex items-center">
-                {/* Primary Tabs - Always Visible */}
-                <div className="flex flex-1 min-w-0">
-                  {primaryTabs.map(tab => {
-                    const IconComponent = tab.icon;
-                    return (
-                      <button
-                        key={tab.id}
-                        onClick={() => handleTabClick(tab.id)}
-                        className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 min-w-0 flex-1 justify-center ${
-                          activeTab === tab.id
-                            ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                            : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                        }`}
-                      >
-                        <IconComponent className="w-4 h-4 flex-shrink-0" />
-                        <span className="hidden sm:inline truncate">{tab.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                {/* More Menu Dropdown */}
-                <div className="relative ml-2">
-                  <button
-                    onClick={() => setShowMoreMenu(!showMoreMenu)}
-                    className={`flex items-center space-x-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 ${
-                      activeTabInSecondary
-                        ? 'bg-blue-600 text-white shadow-lg'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
-                  >
-                    {activeTabInSecondary ? (
-                      <>
-                        <activeTabInSecondary.icon className="w-4 h-4" />
-                        <span className="hidden sm:inline">{activeTabInSecondary.label}</span>
-                      </>
-                    ) : (
-                      <span>More</span>
-                    )}
-                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showMoreMenu ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showMoreMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                      <div className="py-1">
-                        {secondaryTabs.map(tab => {
-                          const IconComponent = tab.icon;
-                          return (
-                            <button
-                              key={tab.id}
-                              onClick={() => handleTabClick(tab.id)}
-                              className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
-                                activeTab === tab.id
-                                  ? 'bg-blue-600 text-white'
-                                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
-                              }`}
-                            >
-                              <IconComponent className="w-4 h-4 flex-shrink-0" />
-                              <span>{tab.label}</span>
-                            </button>
-                          );
-                        })}
+  if (orgStatus === 'approved') {
+    const activeSecondaryTab = secondaryTabs.find(tab => activeTab === tab.id);
+    return (
+      <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
+        <Header />
+        {/* Notifications */}
+        {notifications.length > 0 && (
+          <div className="fixed top-4 right-4 z-50 space-y-2">
+            {notifications.map((notification, index) => (
+              <div
+                key={index}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slide-in-right"
+              >
+                {notification}
+              </div>
+            ))}
+          </div>
+        )}
+        <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
+            {/* Left Panel - Code Input (only show for certain tabs) */}
+            {['review', 'team', 'assignment', 'chat'].includes(activeTab) && (
+              <div className="space-y-4 sm:space-y-6">
+                <CodeInput 
+                  onAnalyze={handleCodeAnalysis} 
+                  isAnalyzing={isAnalyzing}
+                  code={code}
+                  setCode={setCode}
+                />
+              </div>
+            )}
+            {/* Right Panel - Analysis Results */}
+            <div className={`space-y-4 sm:space-y-6 ${
+              !['review', 'team', 'assignment', 'chat'].includes(activeTab) 
+                ? 'xl:col-span-2' 
+                : ''
+            }`}>
+              {/* Enhanced Tab Navigation */}
+              <div className="bg-gray-800 p-1 rounded-lg">
+                <div className="flex items-center">
+                  {/* Primary Tabs - Always Visible */}
+                  <div className="flex flex-1 min-w-0">
+                    {primaryTabs.map(tab => {
+                      const IconComponent = tab.icon;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => handleTabClick(tab.id)}
+                          className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 min-w-0 flex-1 justify-center ${
+                            activeTab === tab.id
+                              ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                              : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                          }`}
+                        >
+                          <IconComponent className="w-4 h-4 flex-shrink-0" />
+                          <span className="hidden sm:inline truncate">{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* More Menu Dropdown */}
+                  <div className="relative ml-2">
+                    <button
+                      onClick={() => setShowMoreMenu(!showMoreMenu)}
+                      className={`flex items-center space-x-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 ${
+                        activeSecondaryTab
+                          ? 'bg-blue-600 text-white shadow-lg'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                      }`}
+                    >
+                      {activeSecondaryTab ? (
+                        <>
+                          <activeSecondaryTab.icon className="w-4 h-4" />
+                          <span className="hidden sm:inline">{activeSecondaryTab.label}</span>
+                        </>
+                      ) : (
+                        <span>More</span>
+                      )}
+                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showMoreMenu ? 'rotate-180' : ''}`} />
+                    </button>
+                    {/* Dropdown Menu */}
+                    {showMoreMenu && (
+                      <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                        <div className="py-1">
+                          {secondaryTabs.map(tab => {
+                            const IconComponent = tab.icon;
+                            return (
+                              <button
+                                key={tab.id}
+                                onClick={() => handleTabClick(tab.id)}
+                                className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
+                                  activeTab === tab.id
+                                    ? 'bg-blue-600 text-white'
+                                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                                }`}
+                              >
+                                <IconComponent className="w-4 h-4 flex-shrink-0" />
+                                <span>{tab.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
               </div>
+              {/* Tab Content */}
+              <ErrorBoundary>
+                {activeTab === 'review' && (
+                  <ReviewPanel 
+                    analysis={analysis} 
+                    isAnalyzing={isAnalyzing} 
+                    onAutoFix={applyAutoFix}
+                    sessionId={liveSession.id}
+                  />
+                )}
+                {/* {activeTab === 'team' && (
+                  <ReviewerAssignment 
+                    teamMembers={teamMembers}
+                    onInviteToSession={inviteToSession}
+                    onNotification={addNotification}
+                  />
+                )} */}
+                {/* {activeTab === 'history' && (
+                  <ReviewHistory 
+                    onExport={() => addNotification('Review history exported successfully')}
+                  />
+                )} */}
+                {activeTab === 'chat' && (
+                  <AIChat analysis={analysis} code={code} />
+                )}
+                {activeTab === 'settings' && (
+                  <SettingsPanel
+                    customRules={customRules}
+                    onRulesChange={handleCustomRulesChange}
+                    settings={settings}
+                    onSettingsChange={handleSettingsChange}
+                  />
+                )}
+              </ErrorBoundary>
             </div>
-
-            {/* Tab Content */}
-            <ErrorBoundary>
-              {activeTab === 'review' && (
-                <ReviewPanel 
-                  analysis={analysis} 
-                  isAnalyzing={isAnalyzing} 
-                  onAutoFix={applyAutoFix}
-                  sessionId={liveSession.id}
-                />
-              )}
-              {activeTab === 'team' && (
-                <TeamDashboard 
-                  teamMembers={teamMembers}
-                  onInviteToSession={inviteToSession}
-                  onNotification={addNotification}
-                />
-              )}
-              {activeTab === 'history' && (
-                <ReviewHistory 
-                  onExport={() => addNotification('Review history exported successfully')}
-                />
-              )}
-              {activeTab === 'chat' && (
-                <AIChat analysis={analysis} code={code} />
-              )}
-              {activeTab === 'settings' && (
-                <SettingsPanel
-                  customRules={customRules}
-                  onRulesChange={handleCustomRulesChange}
-                  settings={settings}
-                  onSettingsChange={handleSettingsChange}
-                />
-              )}
-              {/* Add a route for organization registration */}
-              {/* Example: <Route path="/register-org" element={<OrganizationRegister />} /> */}
-              {/* Optionally, add a button or link to "/register-org" on the main page */}
-            </ErrorBoundary>
           </div>
-        </div>
-      </main>
-
-      {/* Click outside to close dropdown */}
-      {showMoreMenu && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setShowMoreMenu(false)}
-        />
-      )}
-
-      <style>{`
-        @keyframes slide-in-right {
-          from {
-            transform: translateX(100%);
-            opacity: 0;
+        </main>
+        {/* Click outside to close dropdown */}
+        {showMoreMenu && (
+          <div 
+            className="fixed inset-0 z-40" 
+            onClick={() => setShowMoreMenu(false)}
+          />
+        )}
+        <style>{`
+          @keyframes slide-in-right {
+            from {
+              transform: translateX(100%);
+              opacity: 0;
+            }
+            to {
+              transform: translateX(0);
+              opacity: 1;
+            }
           }
-          to {
-            transform: translateX(0);
-            opacity: 1;
+          .animate-slide-in-right {
+            animation: slide-in-right 0.3s ease-out;
           }
-        }
-        .animate-slide-in-right {
-          animation: slide-in-right 0.3s ease-out;
-        }
-      `}</style>
-    </div>
-  );
+        `}</style>
+      </div>
+    );
+  }
+
+  return null;
 }
 
 export default App;

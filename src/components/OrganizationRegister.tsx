@@ -22,7 +22,7 @@ const OrganizationRegister: React.FC = () => {
       return;
     }
     try {
-      await addDoc(collection(db, 'pendingOrganizations'), {
+      const docRef = await addDoc(collection(db, 'pendingOrganizations'), {
         orgName,
         contactEmail,
         website,
@@ -34,6 +34,7 @@ const OrganizationRegister: React.FC = () => {
         status: 'pending',
         createdAt: Timestamp.now(),
       });
+      localStorage.setItem('orgDocId', docRef.id);
       setSubmitted(true);
     } catch (err) {
       setError('Failed to submit registration. Please try again.');
@@ -44,7 +45,14 @@ const OrganizationRegister: React.FC = () => {
     return (
       <div className="bg-gray-800 text-white rounded-lg p-6 max-w-md mx-auto mt-12 text-center">
         <h2 className="text-2xl font-bold mb-4">Registration Submitted</h2>
-        <p>Your organization registration request has been submitted and is pending approval by a superadmin.</p>
+        <p className="mb-4">Your organization registration request has been submitted and is pending approval by a superadmin.</p>
+        <p className="mb-6">Please <span className="font-semibold">log in with your admin email</span> to check your approval status. You will be automatically redirected to the main app once your organization is approved.</p>
+        <a
+          href="/"
+          className="inline-block px-6 py-2 bg-blue-600 rounded text-white font-semibold hover:bg-blue-700 transition-colors"
+        >
+          Go to Login
+        </a>
       </div>
     );
   }

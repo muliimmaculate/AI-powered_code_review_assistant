@@ -16,7 +16,7 @@ const LoginScreen: React.FC = () => {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
-      // On success, user will be redirected by AuthContext/App
+      navigate('/'); // Redirect to main page after login
     } catch (err: any) {
       setError(err.message || 'Login failed.');
     } finally {
