@@ -14,6 +14,7 @@ import SuperadminOrgApproval from './components/SuperadminOrgApproval';
 import { db } from './firebase';
 import { doc, getDoc, onSnapshot, getDocs, collection } from 'firebase/firestore';
 import SuperadminDashboard from './components/SuperadminDashboard';
+import TeamMemberLogin from './components/TeamMemberLogin';
 
 interface Issue {
   id: number;
@@ -652,6 +653,11 @@ function App() {
 
   if (orgStatus === 'approved') {
     const activeSecondaryTab = secondaryTabs.find(tab => activeTab === tab.id);
+    const teamMember = JSON.parse(localStorage.getItem('teamMember') || 'null');
+    // If not logged in as a team member, show the login screen
+    if (!teamMember) {
+      return <TeamMemberLogin />;
+    }
     return (
       <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
         <Header />

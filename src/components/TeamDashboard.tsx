@@ -67,12 +67,15 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
+  const orgDocId = localStorage.getItem('orgDocId');
+
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
     setAddError(null);
     setAdding(true);
     try {
-      await addDoc(collection(db, 'teamMembers'), {
+      if (!orgDocId) throw new Error('Organization not found.');
+      await addDoc(collection(db, 'pendingOrganizations', orgDocId, 'teamMembers'), {
         ...newMember,
         expertise: newMember.expertise.split(',').map(s => s.trim()).filter(Boolean),
         activity: {
@@ -104,8 +107,13 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
 
   useEffect(() => {
     setLoading(true);
+    if (!orgDocId) {
+      setError('Organization not found.');
+      setLoading(false);
+      return;
+    }
     const unsubscribe = onSnapshot(
-      collection(db, 'teamMembers'),
+      collection(db, 'pendingOrganizations', orgDocId, 'teamMembers'),
       (snapshot) => {
         setTeamMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember)));
         setLoading(false);
@@ -116,7 +124,7 @@ export const TeamDashboard: React.FC<TeamDashboardProps> = ({
       }
     );
     return () => unsubscribe();
-  }, []);
+  }, [orgDocId]);
 
   const teamMetrics = {
     averageQualityScore: teamMembers.length > 0 ? teamMembers.reduce((sum, m) => sum + m.stats.codeQualityScore, 0) / teamMembers.length : 0,
