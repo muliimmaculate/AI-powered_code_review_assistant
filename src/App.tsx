@@ -1,20 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import { ReviewPanel } from './components/ReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
-import { ChevronDown, Code, Users, Video, UserCheck, History, Zap, Settings as SettingsIcon, GitCompare, MessageSquare, Wrench } from 'lucide-react';
-import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
-import { ReviewerAssignment } from './components/ReviewerAssignment';
-import OrganizationRegister from './components/OrganizationRegister';
-import LoginScreen from './components/LoginScreen';
-import { useAuth } from './AuthContext';
-import SuperadminOrgApproval from './components/SuperadminOrgApproval';
-import { db } from './firebase';
-import { doc, getDoc, onSnapshot, getDocs, collection } from 'firebase/firestore';
-import SuperadminDashboard from './components/SuperadminDashboard';
-import TeamMemberLogin from './components/TeamMemberLogin';
+import { ChevronDown, Code, Users, UserCheck, History, Settings as SettingsIcon, MessageSquare } from 'lucide-react';
 
 interface Issue {
   id: number;
@@ -106,84 +96,15 @@ function useNotifications() {
 }
 
 function App() {
-  const auth = useAuth();
-  const user = auth?.user;
-  const teamMember = auth?.teamMember;
-  const authLoading = auth?.authLoading;
-  const location = useLocation();
-  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'review' | 'team' | 'assignment' | 'history' | 'settings' | 'chat'>('review');
   const [code, setCode] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [customRules, setCustomRules] = useState<any[]>([]);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [orgStatus, setOrgStatus] = useState<'approved' | 'pending' | 'rejected' | null>(null);
-  const [checkingOrg, setCheckingOrg] = useState(false);
-  const [showApprovalPopup, setShowApprovalPopup] = useState(false);
-  const [orgDocId, setOrgDocId] = useState<string | null>(() => localStorage.getItem('orgDocId'));
-  const [showRejection, setShowRejection] = useState(false);
   const approvalTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Interactive state management
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([
-    {
-      id: '1',
-      name: 'Sarah Chen',
-      email: 'sarah@company.com',
-      avatar: 'https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'lead',
-      isOnline: true,
-      expertise: ['React', 'TypeScript', 'Node.js', 'Architecture'],
-      stats: { reviewsCompleted: 45, codeQualityScore: 9.2, issuesFixed: 128, linesReviewed: 15420 },
-      activity: { lastActive: new Date(), currentStreak: 12, totalContributions: 234 }
-    },
-    {
-      id: '2',
-      name: 'Marcus Johnson',
-      email: 'marcus@company.com',
-      avatar: 'https://images.pexels.com/photos/1222271/pexels-photo-1222271.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'senior',
-      isOnline: true,
-      expertise: ['Python', 'Django', 'PostgreSQL', 'DevOps'],
-      stats: { reviewsCompleted: 38, codeQualityScore: 8.7, issuesFixed: 95, linesReviewed: 12300 },
-      activity: { lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), currentStreak: 8, totalContributions: 189 }
-    },
-    {
-      id: '3',
-      name: 'Elena Rodriguez',
-      email: 'elena@company.com',
-      avatar: 'https://images.pexels.com/photos/1239291/pexels-photo-1239291.jpeg?w=100&h=100&fit=crop&crop=face',
-      role: 'developer',
-      isOnline: false,
-      expertise: ['Vue.js', 'JavaScript', 'CSS', 'UI/UX'],
-      stats: { reviewsCompleted: 29, codeQualityScore: 8.4, issuesFixed: 67, linesReviewed: 8900 },
-      activity: { lastActive: new Date(Date.now() - 4 * 60 * 60 * 1000), currentStreak: 5, totalContributions: 156 }
-    }
-  ]);
-
-  const [liveSession, setLiveSession] = useState<LiveSession>({
-    id: 'session-123',
-    participants: teamMembers.filter(m => m.isOnline),
-    isActive: false
-  });
-
-  // Move settings state to App
-  const [settings, setSettings] = useState({
-    autoAnalysis: true,
-    notifications: true,
-    strictMode: false,
-    theme: 'dark',
-    language: 'javascript'
-  });
-  const handleSettingsChange = (key: string, value: any) => {
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
-
-  // Replace notifications state and addNotification with the hook
-  const { notifications, addNotification } = useNotifications();
-
-  // Define all tabs with their properties (removed templates)
+  // Define all tabs with their properties
   const allTabs = [
     { id: 'review', label: 'Review', icon: Code, primary: true },
     { id: 'team', label: 'Team', icon: Users, primary: true },
@@ -192,641 +113,132 @@ function App() {
     { id: 'chat', label: 'AI Chat', icon: MessageSquare, primary: false },
     { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false }
   ];
-
-  // Split tabs into primary (always visible) and secondary (in dropdown)
   const primaryTabs = allTabs.filter(tab => tab.primary);
   const secondaryTabs = allTabs.filter(tab => !tab.primary);
 
-  // Real auto-fix implementations
-  const autoFixFunctions = {
-    'Use strict equality (===) instead of ==': (code: string) => {
-      return code.replace(/([^=!])={2}([^=])/g, '$1===$2');
-    },
-    'Use let or const instead of var': (code: string) => {
-      return code.replace(/\bvar\s+/g, 'const ');
-    },
-    'Missing semicolon': (code: string) => {
-      return code.replace(/([^;\s}])\s*\n/g, '$1;\n');
-    },
-    'Remove console.log statements': (code: string) => {
-      return code.replace(/console\.log\([^)]*\);?\s*/g, '');
-    },
-    'Add error handling for async operations': (code: string) => {
-      const asyncPattern = /(await\s+[^;]+;?)/g;
-      return code.replace(asyncPattern, (match) => {
-        if (code.includes('try') && code.includes('catch')) return match;
-        return `try {\n  ${match.trim()}\n} catch (error) {\n  console.error('Error:', error);\n}`;
-      });
-    },
-    'Use const for immutable variables': (code: string) => {
-      return code.replace(/let\s+(\w+)\s*=\s*([^;]+);(?!\s*\1\s*=)/g, 'const $1 = $2;');
-    },
-    'Add JSDoc documentation': (code: string) => {
-      return code.replace(/(function\s+\w+\([^)]*\)|const\s+\w+\s*=\s*\([^)]*\)\s*=>)/g, (match) => {
-        return `/**\n * Description of the function\n * @param {*} param - Parameter description\n * @returns {*} Return value description\n */\n${match}`;
-      });
-    }
-  };
-
-  const analyzeCodeAccurately = async (codeContent: string): Promise<Analysis> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        try {
-          const lines = codeContent.split('\n');
-          const issues: Issue[] = [];
-          const documentationFeedback: string[] = [];
-          let issueId = 1;
-
-          // Enhanced analysis with real auto-fix capabilities
-          const analysisRules = [
-            {
-              pattern: /([^=!])={2}([^=])/g,
-              message: 'Use strict equality (===) instead of ==',
-              category: 'Best Practice',
-              type: 'warning' as const,
-              severity: 'medium' as const,
-              canAutoFix: true,
-              suggestion: 'Replace == with === for strict equality comparison',
-              getFixedCode: (code: string) => autoFixFunctions['Use strict equality (===) instead of =='](code)
-            },
-            {
-              pattern: /\bvar\s+/g,
-              message: 'Use let or const instead of var',
-              category: 'Best Practice',
-              type: 'info' as const,
-              severity: 'low' as const,
-              canAutoFix: true,
-              suggestion: 'Use const for immutable values, let for mutable ones',
-              getFixedCode: (code: string) => autoFixFunctions['Use let or const instead of var'](code)
-            },
-            {
-              pattern: /console\.log/g,
-              message: 'Console.log statement found',
-              category: 'Best Practice',
-              type: 'info' as const,
-              severity: 'low' as const,
-              canAutoFix: true,
-              suggestion: 'Remove console.log statements in production code',
-              getFixedCode: (code: string) => autoFixFunctions['Remove console.log statements'](code)
-            },
-            {
-              pattern: /SELECT.*\+.*(?!\?)/i,
-              message: 'Potential SQL injection vulnerability',
-              category: 'Security',
-              type: 'error' as const,
-              severity: 'high' as const,
-              canAutoFix: false,
-              suggestion: 'Use parameterized queries to prevent SQL injection'
-            },
-            {
-              pattern: /innerHTML.*(?!sanitize)/i,
-              message: 'Potential XSS vulnerability with innerHTML',
-              category: 'Security',
-              type: 'error' as const,
-              severity: 'high' as const,
-              canAutoFix: false,
-              suggestion: 'Use textContent or sanitize HTML content'
-            },
-            {
-              pattern: /password.*[=:]/i,
-              message: 'Hardcoded credentials detected',
-              category: 'Security',
-              type: 'error' as const,
-              severity: 'high' as const,
-              canAutoFix: false,
-              suggestion: 'Move credentials to environment variables'
-            }
-          ];
-
-          // Apply built-in analysis rules
-          analysisRules.forEach(rule => {
-            const matches = codeContent.match(rule.pattern);
-            if (matches) {
-              lines.forEach((line, index) => {
-                if (rule.pattern.test(line)) {
-                  const originalCode = line.trim();
-                  const fixedCode = rule.getFixedCode ? rule.getFixedCode(line) : undefined;
-                  
-                  issues.push({
-                    id: issueId++,
-                    line: index + 1,
-                    type: rule.type,
-                    severity: rule.severity,
-                    category: rule.category,
-                    message: rule.message,
-                    suggestion: rule.suggestion,
-                    code: fixedCode || '// Manual fix required',
-                    originalCode,
-                    fixedCode,
-                    canAutoFix: rule.canAutoFix
-                  });
-                }
-              });
-            }
-          });
-
-          // Apply custom rules
-          customRules.filter(rule => rule.enabled).forEach(rule => {
-            try {
-              const regex = new RegExp(rule.pattern, 'gi');
-              const matches = codeContent.match(regex);
-              if (matches) {
-                lines.forEach((line, index) => {
-                  if (regex.test(line)) {
-                    issues.push({
-                      id: issueId++,
-                      line: index + 1,
-                      type: rule.severity === 'error' ? 'error' : rule.severity === 'warning' ? 'warning' : 'info',
-                      severity: rule.severity === 'error' ? 'high' : rule.severity === 'warning' ? 'medium' : 'low',
-                      category: rule.category,
-                      message: rule.message,
-                      suggestion: rule.suggestion,
-                      code: rule.fixTemplate || '// Manual fix required',
-                      originalCode: line.trim(),
-                      canAutoFix: !!rule.fixTemplate
-                    });
-                  }
-                });
-              }
-            } catch (error) {
-              console.error('Error applying custom rule:', rule.name, error);
-            }
-          });
-
-          // For each custom rule (which only has a message), add an issue with that message
-          customRules.forEach(rule => {
-            issues.push({
-              id: issueId++,
-              line: 1,
-              type: 'info',
-              severity: 'low',
-              category: 'Custom',
-              message: rule.message,
-              suggestion: '',
-              code: '',
-              canAutoFix: false
-            });
-          });
-
-          // Documentation analysis
-          const hasComments = codeContent.includes('//') || codeContent.includes('/*');
-          const hasJSDoc = codeContent.includes('/**');
-          const functionCount = (codeContent.match(/function\s+\w+|const\s+\w+\s*=\s*\(|=>\s*{/g) || []).length;
-          const commentLines = lines.filter(line => line.trim().startsWith('//') || line.trim().startsWith('*')).length;
-          const documentationRatio = commentLines / Math.max(lines.length, 1);
-
-          if (!hasComments) {
-            documentationFeedback.push('No comments found - consider adding explanatory comments');
-            issues.push({
-              id: issueId++,
-              line: 1,
-              type: 'info',
-              severity: 'medium',
-              category: 'Documentation',
-              message: 'Missing code comments',
-              suggestion: 'Add comments to explain complex logic and function purposes',
-              code: '// Explain what this function does\nfunction myFunction() {\n  // Implementation details\n}',
-              canAutoFix: false
-            });
-          }
-
-          if (!hasJSDoc && functionCount > 0) {
-            documentationFeedback.push('Consider using JSDoc comments for better function documentation');
-            issues.push({
-              id: issueId++,
-              line: 1,
-              type: 'info',
-              severity: 'low',
-              category: 'Documentation',
-              message: 'Missing JSDoc documentation',
-              suggestion: 'Use JSDoc comments to document function parameters and return values',
-              code: autoFixFunctions['Add JSDoc documentation'](codeContent),
-              canAutoFix: true,
-              fixedCode: autoFixFunctions['Add JSDoc documentation'](codeContent)
-            });
-          }
-
-          // Error handling analysis
-          const hasTryCatch = /try\s*{[\s\S]*?catch/i.test(codeContent);
-          const hasAsyncWithoutCatch = /await|\.then\(/.test(codeContent) && !hasTryCatch;
-          
-          if (hasAsyncWithoutCatch) {
-            issues.push({
-              id: issueId++,
-              line: 1,
-              type: 'warning',
-              severity: 'medium',
-              category: 'Error Handling',
-              message: 'Missing error handling for async operations',
-              suggestion: 'Add try-catch blocks or .catch() for error handling',
-              code: autoFixFunctions['Add error handling for async operations'](codeContent),
-              canAutoFix: true,
-              fixedCode: autoFixFunctions['Add error handling for async operations'](codeContent)
-            });
-          }
-
-          // Calculate metrics
-          const complexity = Math.min(10, Math.max(1, 
-            ((codeContent.match(/if|for|while|switch|catch/g) || []).length * 0.5) + 
-            ((codeContent.match(/function|=>/g) || []).length * 0.3) + 2
-          ));
-
-          const securityIssues = issues.filter(i => i.category === 'Security').length;
-          const errorCount = issues.filter(i => i.type === 'error').length;
-          
-          const maintainability = Math.max(1, 10 - (issues.length * 0.3) - (complexity * 0.2));
-          const reliability = Math.max(1, 10 - (errorCount * 1.5));
-          const security = Math.max(1, 10 - (securityIssues * 2));
-          const coverage = Math.min(100, Math.max(20, 85 - (issues.length * 1.5)));
-          const documentation = Math.min(10, Math.max(1, 
-            (hasComments ? 3 : 0) + 
-            (hasJSDoc ? 2 : 0) + 
-            (documentationRatio * 50) + 1
-          ));
-
-          const overallScore = (maintainability + reliability + security + (coverage / 10) + documentation) / 5;
-
-          // Use strictMode to add stricter checks if enabled
-          if (settings.strictMode) {
-            // Example: warn if == is used anywhere
-            lines.forEach((line, index) => {
-              if (/[^=!]==[^=]/.test(line)) {
-                issues.push({
-                  id: issueId++,
-                  line: index + 1,
-                  type: 'warning',
-                  severity: 'medium',
-                  category: 'Strict Mode',
-                  message: 'Use of == is not allowed in strict mode',
-                  suggestion: 'Use === instead',
-                  code: line.trim(),
-                  canAutoFix: false
-                });
-              }
-            });
-          }
-
-          // Use settings.language if needed for future language-specific analysis
-          // For now, we'll just return the issues found.
-
-          resolve({
-            score: Math.round(overallScore * 10) / 10,
-            issues: issues.slice(0, 50),
-            metrics: {
-              complexity: Math.round(complexity * 10) / 10,
-              maintainability: Math.round(maintainability * 10) / 10,
-              reliability: Math.round(reliability * 10) / 10,
-              security: Math.round(security * 10) / 10,
-              coverage: Math.round(coverage),
-              documentation: Math.round(documentation * 10) / 10
-            },
-            documentationFeedback,
-            originalCode: codeContent
-          });
-        } catch (error) {
-          console.error('Analysis error:', error);
-          resolve({
-            score: 5,
-            issues: [],
-            metrics: {
-              complexity: 5,
-              maintainability: 5,
-              reliability: 5,
-              security: 5,
-              coverage: 50,
-              documentation: 5
-            },
-            documentationFeedback: ['Analysis failed - please try again'],
-            originalCode: codeContent
-          });
-        }
-      }, 100);
-    });
-  };
-
-  const handleCodeAnalysis = async (codeContent: string) => {
-    if (!codeContent.trim()) {
-      addNotification('Please provide code to analyze');
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setCode(codeContent);
-    
-    try {
-      const analysis = await analyzeCodeAccurately(codeContent);
-      setAnalysis(analysis);
-      addNotification(`Analysis complete! Found ${analysis.issues.length} issues with score ${analysis.score}/10`);
-    } catch (error) {
-      console.error('Analysis error:', error);
-      addNotification('An error occurred during analysis. Please try again.');
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const applyAutoFix = (issueId: number) => {
-    if (!analysis) return;
-
-    const issue = analysis.issues.find(i => i.id === issueId);
-    if (!issue || !issue.canAutoFix) return;
-
-    let fixedCode = analysis.fixedCode || analysis.originalCode;
-    
-    // Apply the specific fix
-    Object.entries(autoFixFunctions).forEach(([key, fixFunction]) => {
-      if (issue.message.includes(key) || issue.suggestion.includes(key)) {
-        fixedCode = fixFunction(fixedCode);
-      }
-    });
-
-    setAnalysis({
-      ...analysis,
-      fixedCode
-    });
-
-    setCode(fixedCode);
-    addNotification(`Auto-fixed: ${issue.message}`);
-  };
-
-  const handleCustomRulesChange = (rules: any[]) => {
-    setCustomRules(rules);
-    addNotification(`Custom rules updated: ${rules.filter(r => r.enabled).length} active rules`);
-  };
-
-  const handleTabClick = (tabId: string) => {
-    setActiveTab(tabId as any);
-    setShowMoreMenu(false);
-    addNotification(`Switched to ${allTabs.find(t => t.id === tabId)?.label} tab`);
-  };
-
-  const startLiveSession = () => {
-    setLiveSession(prev => ({ ...prev, isActive: true }));
-    addNotification('Live review session started!');
-  };
-
-  const endLiveSession = () => {
-    setLiveSession(prev => ({ ...prev, isActive: false }));
-    addNotification('Live review session ended');
-  };
-
-  const inviteToSession = (memberId: string) => {
-    const member = teamMembers.find(m => m.id === memberId);
-    if (member && !liveSession.participants.find(p => p.id === memberId)) {
-      setLiveSession(prev => ({
-        ...prev,
-        participants: [...prev.participants, member]
-      }));
-      addNotification(`${member.name} invited to live session`);
-    }
-  };
-
-  useEffect(() => {
-    if (!orgDocId) return;
-    setCheckingOrg(true);
-    const orgRef = doc(db, 'pendingOrganizations', orgDocId);
-    const unsub = onSnapshot(orgRef, (orgSnap) => {
-      if (orgSnap.exists()) {
-        const newStatus = orgSnap.data().status;
-        if (orgStatus === 'pending' && newStatus === 'approved') {
-          setShowApprovalPopup(true);
-          if (approvalTimeoutRef.current) clearTimeout(approvalTimeoutRef.current);
-          approvalTimeoutRef.current = setTimeout(() => setShowApprovalPopup(false), 2500);
-        }
-        setOrgStatus(newStatus);
-        if (newStatus === 'rejected') setShowRejection(true);
-      } else {
-        setOrgStatus(null);
-      }
-      setCheckingOrg(false);
-    });
-    return () => { unsub(); if (approvalTimeoutRef.current) clearTimeout(approvalTimeoutRef.current); };
-  }, [orgDocId, orgStatus]);
-
-  const handleReRegister = () => {
-    localStorage.removeItem('orgDocId');
-    setOrgDocId(null);
-    setOrgStatus(null);
-    setShowRejection(false);
-  };
-
-  // Always show SuperadminDashboard at /superadmin
-  if (location.pathname === '/superadmin') {
-    return <SuperadminDashboard />;
-  }
-
-  if (!orgDocId) {
-    return <OrganizationRegister />;
-  }
-
-  if (checkingOrg) {
-    return <div className="text-center text-white mt-12">Checking organization approval status...</div>;
-  }
-
-  if (orgStatus === 'pending') {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="bg-gray-800 text-white rounded-lg p-8 w-full max-w-md shadow-lg text-center">
-          <h2 className="text-2xl font-bold mb-4">Waiting for Approval</h2>
-          <p>Your organization registration is pending approval by the superadmin. You will be notified once approved.</p>
-        </div>
-        {showApprovalPopup && (
-          <div className="fixed top-8 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg z-50 text-lg font-semibold">
-            Your organization has been approved! Redirecting...
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  if (orgStatus === 'rejected' && showRejection) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-900">
-        <div className="bg-gray-800 text-white rounded-lg p-8 w-full max-w-md shadow-lg text-center">
-          <h2 className="text-2xl font-bold mb-4">Registration Rejected</h2>
-          <p>Your organization registration was rejected. Please contact support at <a href="mailto:support@example.com" className="underline text-blue-400">support@example.com</a>.</p>
-          <button onClick={handleReRegister} className="mt-6 px-6 py-2 bg-blue-600 rounded text-white font-semibold hover:bg-blue-700 transition-colors">Re-register</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (orgStatus === 'approved') {
-    const activeSecondaryTab = secondaryTabs.find(tab => activeTab === tab.id);
-    const teamMember = JSON.parse(localStorage.getItem('teamMember') || 'null');
-    // If not logged in as a team member, show the login screen
-    if (!teamMember) {
-      return <TeamMemberLogin />;
-    }
-    return (
-      <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
-        <Header />
-        {/* Notifications */}
-        {notifications.length > 0 && (
-          <div className="fixed top-4 right-4 z-50 space-y-2">
-            {notifications.map((notification, index) => (
-              <div
-                key={index}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg animate-slide-in-right"
-              >
-                {notification}
-              </div>
-            ))}
-          </div>
-        )}
-        <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
-            {/* Left Panel - Code Input (only show for certain tabs) */}
-            {['review', 'team', 'assignment', 'chat'].includes(activeTab) && (
-              <div className="space-y-4 sm:space-y-6">
-                <CodeInput 
-                  onAnalyze={handleCodeAnalysis} 
-                  isAnalyzing={isAnalyzing}
-                  code={code}
-                  setCode={setCode}
-                />
-              </div>
-            )}
-            {/* Right Panel - Analysis Results */}
-            <div className={`space-y-4 sm:space-y-6 ${
-              !['review', 'team', 'assignment', 'chat'].includes(activeTab) 
-                ? 'xl:col-span-2' 
-                : ''
-            }`}>
-              {/* Enhanced Tab Navigation */}
-              <div className="bg-gray-800 p-1 rounded-lg">
-                <div className="flex items-center">
-                  {/* Primary Tabs - Always Visible */}
-                  <div className="flex flex-1 min-w-0">
-                    {primaryTabs.map(tab => {
-                      const IconComponent = tab.icon;
-                      return (
-                        <button
-                          key={tab.id}
-                          onClick={() => handleTabClick(tab.id)}
-                          className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 min-w-0 flex-1 justify-center ${
-                            activeTab === tab.id
-                              ? 'bg-blue-600 text-white shadow-lg transform scale-105'
-                              : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                          }`}
-                        >
-                          <IconComponent className="w-4 h-4 flex-shrink-0" />
-                          <span className="hidden sm:inline truncate">{tab.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* More Menu Dropdown */}
-                  <div className="relative ml-2">
-                    <button
-                      onClick={() => setShowMoreMenu(!showMoreMenu)}
-                      className={`flex items-center space-x-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 ${
-                        activeSecondaryTab
-                          ? 'bg-blue-600 text-white shadow-lg'
-                          : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                      }`}
-                    >
-                      {activeSecondaryTab ? (
-                        <>
-                          <activeSecondaryTab.icon className="w-4 h-4" />
-                          <span className="hidden sm:inline">{activeSecondaryTab.label}</span>
-                        </>
-                      ) : (
-                        <span>More</span>
-                      )}
-                      <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showMoreMenu ? 'rotate-180' : ''}`} />
-                    </button>
-                    {/* Dropdown Menu */}
-                    {showMoreMenu && (
-                      <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
-                        <div className="py-1">
-                          {secondaryTabs.map(tab => {
-                            const IconComponent = tab.icon;
-                            return (
-                              <button
-                                key={tab.id}
-                                onClick={() => handleTabClick(tab.id)}
-                                className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
-                                  activeTab === tab.id
-                                    ? 'bg-blue-600 text-white'
-                                    : 'text-gray-300 hover:text-white hover:bg-gray-700'
-                                }`}
-                              >
-                                <IconComponent className="w-4 h-4 flex-shrink-0" />
-                                <span>{tab.label}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-              {/* Tab Content */}
-              <ErrorBoundary>
-                {activeTab === 'review' && (
-                  <ReviewPanel 
-                    analysis={analysis} 
-                    isAnalyzing={isAnalyzing} 
-                    onAutoFix={applyAutoFix}
-                    sessionId={liveSession.id}
-                  />
-                )}
-                {/* {activeTab === 'team' && (
-                  <ReviewerAssignment 
-                    teamMembers={teamMembers}
-                    onInviteToSession={inviteToSession}
-                    onNotification={addNotification}
-                  />
-                )} */}
-                {/* {activeTab === 'history' && (
-                  <ReviewHistory 
-                    onExport={() => addNotification('Review history exported successfully')}
-                  />
-                )} */}
-                {activeTab === 'chat' && (
-                  <AIChat analysis={analysis} code={code} />
-                )}
-                {activeTab === 'settings' && (
-                  <SettingsPanel
-                    customRules={customRules}
-                    onRulesChange={handleCustomRulesChange}
-                    settings={settings}
-                    onSettingsChange={handleSettingsChange}
-                  />
-                )}
-              </ErrorBoundary>
+  // Main app UI
+  return (
+    <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
+      <Header />
+      <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
+          {/* Left Panel - Code Input (only show for certain tabs) */}
+          {['review', 'team', 'assignment', 'chat'].includes(activeTab) && (
+            <div className="space-y-4 sm:space-y-6">
+              <CodeInput 
+                onAnalyze={() => {}} 
+                isAnalyzing={isAnalyzing}
+                code={code}
+                setCode={setCode}
+              />
             </div>
+          )}
+          {/* Right Panel - Analysis Results */}
+          <div className={`space-y-4 sm:space-y-6 ${
+            !['review', 'team', 'assignment', 'chat'].includes(activeTab) 
+              ? 'xl:col-span-2' 
+              : ''
+          }`}>
+            {/* Enhanced Tab Navigation */}
+            <div className="bg-gray-800 p-1 rounded-lg">
+              <div className="flex items-center">
+                {/* Primary Tabs - Always Visible */}
+                <div className="flex flex-1 min-w-0">
+                  {primaryTabs.map(tab => {
+                    const IconComponent = tab.icon;
+                    return (
+                      <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id as any)}
+                        className={`flex items-center space-x-2 px-3 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 min-w-0 flex-1 justify-center ${
+                          activeTab === tab.id
+                            ? 'bg-blue-600 text-white shadow-lg transform scale-105'
+                            : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                        }`}
+                      >
+                        <IconComponent className="w-4 h-4 flex-shrink-0" />
+                        <span className="hidden sm:inline truncate">{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* More Menu Dropdown */}
+                <div className="relative ml-2">
+                  <button
+                    onClick={() => setShowMoreMenu(!showMoreMenu)}
+                    className={`flex items-center space-x-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium transition-all duration-200 ${
+                      secondaryTabs.find(tab => activeTab === tab.id)
+                        ? 'bg-blue-600 text-white shadow-lg'
+                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                    }`}
+                  >
+                    <span>More</span>
+                    <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${showMoreMenu ? 'rotate-180' : ''}`} />
+                  </button>
+                  {showMoreMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                      <div className="py-1">
+                        {secondaryTabs.map(tab => {
+                          const IconComponent = tab.icon;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => { setActiveTab(tab.id as any); setShowMoreMenu(false); }}
+                              className={`w-full flex items-center space-x-3 px-4 py-3 text-sm transition-colors ${
+                                activeTab === tab.id
+                                  ? 'bg-blue-600 text-white'
+                                  : 'text-gray-300 hover:text-white hover:bg-gray-700'
+                              }`}
+                            >
+                              <IconComponent className="w-4 h-4 flex-shrink-0" />
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                {/* Click outside to close dropdown */}
+                {showMoreMenu && (
+                  <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={() => setShowMoreMenu(false)}
+                  />
+                )}
+              </div>
+            </div>
+            {/* Tab Content */}
+            {activeTab === 'review' && (
+              <ReviewPanel 
+                analysis={analysis} 
+                isAnalyzing={isAnalyzing} 
+                onAutoFix={() => {}}
+                sessionId={''}
+              />
+            )}
+            {activeTab === 'chat' && (
+              <AIChat analysis={analysis} code={code} />
+            )}
+            {activeTab === 'settings' && (
+              <SettingsPanel
+                customRules={customRules}
+                onRulesChange={() => {}}
+                settings={{
+                  autoAnalysis: true,
+                  notifications: true,
+                  strictMode: false,
+                  theme: 'dark',
+                  language: 'javascript'
+                }}
+                onSettingsChange={() => {}}
+              />
+            )}
           </div>
-        </main>
-        {/* Click outside to close dropdown */}
-        {showMoreMenu && (
-          <div 
-            className="fixed inset-0 z-40" 
-            onClick={() => setShowMoreMenu(false)}
-          />
-        )}
-        <style>{`
-          @keyframes slide-in-right {
-            from {
-              transform: translateX(100%);
-              opacity: 0;
-            }
-            to {
-              transform: translateX(0);
-              opacity: 1;
-            }
-          }
-          .animate-slide-in-right {
-            animation: slide-in-right 0.3s ease-out;
-          }
-        `}</style>
-      </div>
-    );
-  }
-
-  return null;
+        </div>
+      </main>
+    </div>
+  );
 }
 
 export default App;
