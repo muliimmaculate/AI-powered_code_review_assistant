@@ -7,8 +7,6 @@ interface ReviewPanelProps {
   sessionId: string;
 }
 
-import React from 'react';
-
 interface ReviewPanelProps {
   analysis: any;
   isAnalyzing: boolean;
