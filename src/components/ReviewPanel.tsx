@@ -82,6 +82,25 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
   const [expandedIssues, setExpandedIssues] = useState<Set<number>>(new Set());
   const [showMetrics, setShowMetrics] = useState(true);
   const [copiedCode, setCopiedCode] = useState<number | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [recipientName, setRecipientName] = useState('');
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [recommendationToSend, setRecommendationToSend] = useState('');
+  const [sending, setSending] = useState(false);
+
+  // Open modal with a prefilled recommendation (default to first recommendation if available)
+  const openSendModal = (prefill?: string) => {
+    setRecommendationToSend(prefill || (analysis.recommendations?.[0] || ''));
+    setIsModalOpen(true);
+  };
+
+  const closeSendModal = () => {
+    setIsModalOpen(false);
+    setRecipientName('');
+    setRecipientEmail('');
+    setRecommendationToSend('');
+    setSending(false);
+  };
 
   if (isAnalyzing) {
     return (
@@ -508,9 +527,17 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
       {/* Recommendations */}
       {analysis.recommendations && analysis.recommendations.length > 0 && (
         <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
-          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-            Recommendations
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+              Recommendations
+            </h3>
+            <button
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors text-sm font-medium"
+              onClick={() => openSendModal(analysis.recommendations[0])}
+            >
+              Send Recommendation via Email
+            </button>
+          </div>
           <ul className="space-y-2">
             {analysis.recommendations.map((recommendation, index) => (
               <li key={index} className="flex items-start space-x-2">
@@ -521,6 +548,72 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {/* Send Recommendation Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 w-full max-w-md relative">
+            <button
+              className="absolute top-2 right-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              onClick={closeSendModal}
+              aria-label="Close"
+            >
+              <XCircle className="w-6 h-6" />
+            </button>
+            <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Send Recommendation</h4>
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                setSending(true);
+                // Placeholder for sending logic
+                setTimeout(() => {
+                  setSending(false);
+                  closeSendModal();
+                }, 1000);
+              }}
+              className="space-y-4"
+            >
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Name</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={recipientName}
+                  onChange={e => setRecipientName(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Email</label>
+                <input
+                  type="email"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={recipientEmail}
+                  onChange={e => setRecipientEmail(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recommendation</label>
+                <textarea
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  rows={3}
+                  value={recommendationToSend}
+                  onChange={e => setRecommendationToSend(e.target.value)}
+                  required
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium disabled:opacity-60"
+                disabled={sending}
+              >
+                {sending ? 'Sending...' : 'Send Recommendation'}
+              </button>
+            </form>
+          </div>
         </div>
       )}
 
