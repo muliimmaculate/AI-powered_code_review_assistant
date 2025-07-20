@@ -49,25 +49,72 @@ function App() {
       let issues: any[] = [];
       if (language === 'javascript') {
         if (codeContent.includes('var ')) {
-          issues.push({ line: 1, message: 'Avoid using var', suggestion: 'Use let or const', severity: 'low' });
+          issues.push({ 
+            type: 'code-quality',
+            severity: 'low',
+            category: 'Code Quality',
+            message: 'Avoid using var',
+            line: 1,
+            column: 1,
+            code: 'var example = "value";',
+            suggestion: 'Use let or const instead of var',
+            fixedCode: 'const example = "value";',
+            confidence: 95,
+            impact: 'low',
+            effort: 'easy'
+          });
         }
       } else if (language === 'python') {
         if (codeContent.includes('print ')) {
-          issues.push({ line: 1, message: 'Use print() function', suggestion: 'Use print()', severity: 'low' });
+          issues.push({ 
+            type: 'syntax',
+            severity: 'medium',
+            category: 'Syntax',
+            message: 'Use print() function',
+            line: 1,
+            column: 1,
+            code: 'print "hello"',
+            suggestion: 'Use print() function syntax',
+            fixedCode: 'print("hello")',
+            confidence: 100,
+            impact: 'medium',
+            effort: 'easy'
+          });
         }
       } else if (language === 'java') {
         if (codeContent.includes('System.out.println')) {
-          issues.push({ line: 1, message: 'Avoid using System.out.println in production', suggestion: 'Use a logger', severity: 'low' });
+          issues.push({ 
+            type: 'best-practice',
+            severity: 'medium',
+            category: 'Best Practices',
+            message: 'Avoid using System.out.println in production',
+            line: 1,
+            column: 1,
+            code: 'System.out.println("debug");',
+            suggestion: 'Use a proper logging framework',
+            fixedCode: 'logger.info("debug");',
+            confidence: 90,
+            impact: 'medium',
+            effort: 'medium'
+          });
         }
       } else {
         // Fallback: TODO/FIXME check
         issues = (codeContent.split('\n') || []).map((line, idx) => {
           if (/TODO|FIXME/.test(line)) {
             return {
-              line: idx + 1,
-              message: 'Found TODO or FIXME',
-              suggestion: 'Resolve or remove TODO/FIXME comments',
+              type: 'maintenance',
               severity: 'medium',
+              category: 'Maintenance',
+              message: 'Found TODO or FIXME',
+              line: idx + 1,
+              column: 1,
+              code: line.trim(),
+              suggestion: 'Resolve or remove TODO/FIXME comments',
+              fixedCode: '// Resolved: ' + line.trim(),
+              confidence: 80,
+              impact: 'low',
+              effort: 'medium'
             };
           }
           return null;
@@ -76,32 +123,51 @@ function App() {
       
       const overallScore = Math.max(0, 100 - (issues.length * 10));
       
+      // Calculate summary statistics
+      const summary = {
+        totalIssues: issues.length,
+        criticalIssues: issues.filter(i => i.severity === 'critical').length,
+        highIssues: issues.filter(i => i.severity === 'high').length,
+        mediumIssues: issues.filter(i => i.severity === 'medium').length,
+        lowIssues: issues.filter(i => i.severity === 'low').length,
+        securityIssues: issues.filter(i => i.category === 'Security').length,
+        performanceIssues: issues.filter(i => i.category === 'Performance').length,
+        qualityIssues: issues.filter(i => i.category === 'Code Quality').length
+      };
+      
       setAnalysis({
         language,
-        issues,
-        summary: issues.length ? `${issues.length} issues found.` : 'No issues found.',
         overallScore,
+        issues,
+        summary,
         metrics: {
-          linesOfCode,
+          complexity: Math.max(10, 100 - (issues.length * 5)),
+          maintainability: Math.max(20, 100 - (issues.length * 8)),
+          readability: Math.max(30, 100 - (issues.length * 6)),
+          performance: Math.max(40, 100 - (issues.filter(i => i.category === 'Performance').length * 15)),
+          security: Math.max(50, 100 - (issues.filter(i => i.category === 'Security').length * 20)),
+          documentation: Math.max(60, 100 - (issues.filter(i => i.category === 'Documentation').length * 10)),
           cyclomaticComplexity: Math.floor(linesOfCode / 10) + 1,
-          maintainabilityIndex: overallScore,
-          securityScore: overallScore,
-          performanceScore: overallScore
+          cognitiveComplexity: Math.floor(linesOfCode / 15) + 1,
+          linesOfCode,
+          duplicateLines: Math.floor(linesOfCode * 0.05),
+          testCoverage: Math.max(0, 80 - (issues.length * 5))
         },
         recommendations: issues.length > 0 ? [
           'Review and fix the identified issues',
           'Consider adding more comprehensive error handling',
-          'Ensure code follows best practices'
+          'Ensure code follows best practices',
+          'Add unit tests to improve code coverage',
+          'Consider refactoring complex functions'
         ] : [
           'Code looks good!',
           'Consider adding unit tests',
-          'Keep following best practices'
+          'Keep following best practices',
+          'Document complex logic with comments',
+          'Consider performance optimizations'
         ],
-        codeSmells: issues.filter(issue => issue.severity === 'medium' || issue.severity === 'low'),
-        technicalDebt: {
-          estimatedHours: issues.length * 0.5,
-          priority: issues.length > 5 ? 'high' : issues.length > 2 ? 'medium' : 'low'
-        }
+        codeSmells: issues.filter(issue => issue.severity === 'medium' || issue.severity === 'low').length,
+        technicalDebt: `Estimated ${(issues.length * 0.5).toFixed(1)} hours to resolve all issues. Priority: ${issues.length > 5 ? 'High' : issues.length > 2 ? 'Medium' : 'Low'}`
       });
       setIsAnalyzing(false);
     }, 800);
