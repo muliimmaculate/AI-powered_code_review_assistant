@@ -104,7 +104,13 @@ function App() {
       let maxCurrentNesting = 0;
       const lineMap: { [key: string]: number } = {};
       let blockBuffer: string[] = [];
-      // --- Syntax Error Detection ---
+      let unreachableCodeCount = 0;
+      let missingDefaultSwitch = 0;
+      let unusedParamsCount = 0;
+      let inconsistentReturnCount = 0;
+      let longParamListCount = 0;
+      let suspiciousCommentCount = 0;
+      // --- Syntax Error Detection (existing logic) ---
       if (language === 'javascript') {
         try {
           // Try parsing code
@@ -297,9 +303,151 @@ function App() {
           });
         }
       }
-      // --- Quality Metrics & Code Smells ---
+      // --- Advanced Checks ---
+      // Track function signatures and returns for advanced checks
+      let currentFunctionParams: string[] = [];
+      let currentFunctionReturns: string[] = [];
+      let insideSwitch = false;
+      let hasDefaultInSwitch = false;
+      let functionStartLine = 0;
+      let functionParamCount = 0;
+      let functionReturnTypes: string[] = [];
+      let afterReturnOrThrow = false;
       lines.forEach((line, idx) => {
         const trimmed = line.trim();
+        // Suspicious comments
+        if (/\b(HACK|BUG|XXX|FIXME)\b/i.test(trimmed)) {
+          suspiciousCommentCount++;
+          issues.push({
+            type: 'comment',
+            severity: 'medium',
+            category: 'Comment',
+            message: `Suspicious comment at line ${idx + 1}`,
+            line: idx + 1,
+            column: 1,
+            code: trimmed,
+            suggestion: 'Clarify or address this comment',
+            fixedCode: '',
+            confidence: 80,
+            impact: 'medium',
+            effort: 'easy'
+          });
+        }
+        // Unreachable code after return/throw/break/continue
+        if (afterReturnOrThrow && trimmed && !/^\}/.test(trimmed)) {
+          unreachableCodeCount++;
+          issues.push({
+            type: 'unreachable',
+            severity: 'high',
+            category: 'Code Quality',
+            message: `Unreachable code at line ${idx + 1}`,
+            line: idx + 1,
+            column: 1,
+            code: trimmed,
+            suggestion: 'Remove or refactor unreachable code',
+            fixedCode: '',
+            confidence: 90,
+            impact: 'high',
+            effort: 'medium'
+          });
+        }
+        if (/\b(return|throw|break|continue)\b/.test(trimmed)) {
+          afterReturnOrThrow = true;
+        } else if (trimmed && !/^\}/.test(trimmed)) {
+          afterReturnOrThrow = false;
+        }
+        // Switch statement checks
+        if (/^switch\b/.test(trimmed)) {
+          insideSwitch = true;
+          hasDefaultInSwitch = false;
+        }
+        if (insideSwitch && /default:/.test(trimmed)) {
+          hasDefaultInSwitch = true;
+        }
+        if (insideSwitch && /\}/.test(trimmed)) {
+          if (!hasDefaultInSwitch) {
+            missingDefaultSwitch++;
+            issues.push({
+              type: 'switch',
+              severity: 'medium',
+              category: 'Code Quality',
+              message: `Switch statement missing default case (ends at line ${idx + 1})`,
+              line: idx + 1,
+              column: 1,
+              code: '',
+              suggestion: 'Add a default case to the switch statement',
+              fixedCode: '',
+              confidence: 80,
+              impact: 'medium',
+              effort: 'easy'
+            });
+          }
+          insideSwitch = false;
+        }
+        // Function detection and parameter checks
+        const funcMatch = trimmed.match(/(function|def|public |private |protected |static )\s*([a-zA-Z0-9_]+)?\s*\(([^)]*)\)/);
+        if (funcMatch) {
+          functionCount++;
+          functionStartLine = idx + 1;
+          currentFunctionParams = funcMatch[3].split(',').map(s => s.trim()).filter(Boolean);
+          functionParamCount = currentFunctionParams.length;
+          if (functionParamCount > 4) longParamListCount++;
+          if (currentFunctionLength > 30) longFunctions++;
+          currentFunctionLength = 0;
+          inFunction = true;
+          functionReturnTypes = [];
+        }
+        if (inFunction) currentFunctionLength++;
+        // Track returns for inconsistent return type detection
+        if (/return\s+([^;]*)/.test(trimmed)) {
+          const retVal = trimmed.match(/return\s+([^;]*)/);
+          if (retVal && retVal[1]) functionReturnTypes.push(retVal[1].trim());
+        }
+        // End of function (very basic)
+        if (inFunction && trimmed === '}') {
+          // Unused parameters
+          currentFunctionParams.forEach(param => {
+            if (param && !new RegExp(`\\b${param}\\b`).test(lines.slice(functionStartLine - 1, idx + 1).join(' '))) {
+              unusedParamsCount++;
+              issues.push({
+                type: 'unused-param',
+                severity: 'medium',
+                category: 'Code Quality',
+                message: `Unused parameter '${param}' in function starting at line ${functionStartLine}`,
+                line: functionStartLine,
+                column: 1,
+                code: '',
+                suggestion: 'Remove or use this parameter',
+                fixedCode: '',
+                confidence: 80,
+                impact: 'medium',
+                effort: 'easy'
+              });
+            }
+          });
+          // Inconsistent return types (very basic: checks if all return types are the same string)
+          if (functionReturnTypes.length > 1 && new Set(functionReturnTypes.map(x => typeof x)).size > 1) {
+            inconsistentReturnCount++;
+            issues.push({
+              type: 'return',
+              severity: 'medium',
+              category: 'Code Quality',
+              message: `Inconsistent return types in function starting at line ${functionStartLine}`,
+              line: functionStartLine,
+              column: 1,
+              code: '',
+              suggestion: 'Ensure all return statements return the same type',
+              fixedCode: '',
+              confidence: 70,
+              impact: 'medium',
+              effort: 'medium'
+            });
+          }
+          inFunction = false;
+          currentFunctionParams = [];
+          functionReturnTypes = [];
+        }
+        // --- Quality Metrics & Code Smells ---
         // Comments
         if (/^\/\//.test(trimmed) || /^#/.test(trimmed)) commentLines++;
         // Function detection (very basic)
@@ -357,43 +505,26 @@ function App() {
       });
       // --- Recommendations ---
       const recommendations: string[] = [];
-      if (syntaxError) {
-        recommendations.push('Fix all syntax errors before running the code.');
-      }
-      if (longFunctions > 0) {
-        recommendations.push('Split long functions into smaller, focused ones.');
-      }
-      if (maxNesting > 3) {
-        recommendations.push('Reduce nesting for better readability.');
-      }
-      if (duplicateLines > 0) {
-        recommendations.push('Remove duplicate lines of code.');
-      }
-      if (duplicateBlocks > 0) {
-        recommendations.push('Refactor duplicate code blocks into functions.');
-      }
-      if (inconsistentNaming) {
-        recommendations.push('Use consistent variable naming (camelCase or snake_case, not both).');
-      }
-      if (functionCount === 0) {
-        recommendations.push('Consider organizing code into functions for better structure.');
-      }
-      if (commentLines / linesOfCode < 0.05) {
-        recommendations.push('Add more comments to explain complex logic.');
-      }
-      if (deadCodeCount > 0) {
-        recommendations.push('Remove unused variables or functions (dead code).');
-      }
-      if (magicNumberCount > 0) {
-        recommendations.push('Replace magic numbers with named constants.');
-      }
-      // Suggest adding tests if no test-like function is found
-      if (!/test|spec|assert|expect/.test(codeContent)) {
-        recommendations.push('Consider adding tests to improve code reliability.');
-      }
-      if (recommendations.length === 0) {
-        recommendations.push('Code looks good! Keep following best practices.');
-      }
+      if (syntaxError) recommendations.push('Fix all syntax errors before running the code.');
+      if (longFunctions > 0) recommendations.push('Split long functions into smaller, focused ones.');
+      if (maxNesting > 3) recommendations.push('Reduce nesting for better readability.');
+      if (duplicateLines > 0) recommendations.push('Remove duplicate lines of code.');
+      if (duplicateBlocks > 0) recommendations.push('Refactor duplicate code blocks into functions.');
+      if (inconsistentNaming) recommendations.push('Use consistent variable naming (camelCase or snake_case, not both).');
+      if (functionCount === 0) recommendations.push('Consider organizing code into functions for better structure.');
+      if (commentLines / linesOfCode < 0.05) recommendations.push('Add more comments to explain complex logic.');
+      if (deadCodeCount > 0) recommendations.push('Remove unused variables or functions (dead code).');
+      if (magicNumberCount > 0) recommendations.push('Replace magic numbers with named constants.');
+      if (unreachableCodeCount > 0) recommendations.push('Remove or refactor unreachable code.');
+      if (missingDefaultSwitch > 0) recommendations.push('Add default cases to all switch statements.');
+      if (unusedParamsCount > 0) recommendations.push('Remove or use unused function parameters.');
+      if (inconsistentReturnCount > 0) recommendations.push('Ensure all return statements in a function return the same type.');
+      if (longParamListCount > 0) recommendations.push('Refactor functions with long parameter lists to use objects or fewer parameters.');
+      if (linesOfCode > 300) recommendations.push('Split long files into smaller modules.');
+      if (functionCount > 10) recommendations.push('Reduce the number of functions in a single file.');
+      if (suspiciousCommentCount > 0) recommendations.push('Clarify or address suspicious comments (HACK, BUG, XXX, FIXME).');
+      if (!/test|spec|assert|expect/.test(codeContent)) recommendations.push('Consider adding tests to improve code reliability.');
+      if (recommendations.length === 0) recommendations.push('Code looks good! Keep following best practices.');
       // --- Metrics ---
       const metrics = {
         complexity: Math.min(100, maxNesting * 20 + longFunctions * 10 + (duplicateLines > 0 ? 10 : 0) + cyclomaticComplexity * 5),
@@ -408,7 +539,7 @@ function App() {
         duplicateLines,
         testCoverage: 0 // Not detected
       };
-      const score = Math.max(0, 100 - (issues.length * 10) - (longFunctions * 5) - (maxNesting * 3) - (duplicateLines * 2) - (duplicateBlocks * 5) - (deadCodeCount * 2) - (magicNumberCount * 2));
+      const score = Math.max(0, 100 - (issues.length * 10) - (longFunctions * 5) - (maxNesting * 3) - (duplicateLines * 2) - (duplicateBlocks * 5) - (deadCodeCount * 2) - (magicNumberCount * 2) - (unreachableCodeCount * 5) - (missingDefaultSwitch * 2) - (unusedParamsCount * 2) - (inconsistentReturnCount * 2) - (longParamListCount * 2) - (linesOfCode > 300 ? 5 : 0) - (functionCount > 10 ? 5 : 0) - (suspiciousCommentCount * 2));
       const summary = {
         totalIssues: issues.length,
         criticalIssues: issues.filter(i => i.severity === 'critical').length,
@@ -426,8 +557,8 @@ function App() {
         summary,
         metrics,
         recommendations,
-        codeSmells: longFunctions + (maxNesting > 3 ? 1 : 0) + (duplicateLines > 0 ? 1 : 0) + duplicateBlocks + deadCodeCount + magicNumberCount,
-        technicalDebt: `Estimated ${(issues.length * 0.5 + longFunctions * 0.2 + maxNesting * 0.1 + duplicateBlocks * 0.2 + deadCodeCount * 0.1 + magicNumberCount * 0.1).toFixed(1)} hours to resolve all issues. Priority: ${issues.length > 5 ? 'High' : issues.length > 2 ? 'Medium' : 'Low'}`
+        codeSmells: longFunctions + (maxNesting > 3 ? 1 : 0) + (duplicateLines > 0 ? 1 : 0) + duplicateBlocks + deadCodeCount + magicNumberCount + unreachableCodeCount + missingDefaultSwitch + unusedParamsCount + inconsistentReturnCount + longParamListCount + (linesOfCode > 300 ? 1 : 0) + (functionCount > 10 ? 1 : 0) + suspiciousCommentCount,
+        technicalDebt: `Estimated ${(issues.length * 0.5 + longFunctions * 0.2 + maxNesting * 0.1 + duplicateBlocks * 0.2 + deadCodeCount * 0.1 + magicNumberCount * 0.1 + unreachableCodeCount * 0.2 + missingDefaultSwitch * 0.1 + unusedParamsCount * 0.1 + inconsistentReturnCount * 0.1 + longParamListCount * 0.1 + (linesOfCode > 300 ? 0.2 : 0) + (functionCount > 10 ? 0.2 : 0) + suspiciousCommentCount * 0.1).toFixed(1)} hours to resolve all issues. Priority: ${issues.length > 5 ? 'High' : issues.length > 2 ? 'Medium' : 'Low'}`
       });
       setIsAnalyzing(false);
     }, 800);
