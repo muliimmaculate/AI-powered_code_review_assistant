@@ -87,10 +87,16 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
   const [recipientEmail, setRecipientEmail] = useState('');
   const [recommendationToSend, setRecommendationToSend] = useState('');
   const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState<string | null>(null);
 
   // Open modal with a prefilled recommendation (default to first recommendation if available)
   const openSendModal = (prefill?: string) => {
-    setRecommendationToSend(prefill || (analysis.recommendations?.[0] || ''));
+    if (analysis && analysis.recommendations && analysis.recommendations.length > 0) {
+      setRecommendationToSend(prefill || analysis.recommendations[0]);
+    } else {
+      setRecommendationToSend(prefill || '');
+    }
     setIsModalOpen(true);
   };
 
@@ -100,6 +106,8 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
     setRecipientEmail('');
     setRecommendationToSend('');
     setSending(false);
+    setSendError(null);
+    setSendSuccess(null);
   };
 
   if (isAnalyzing) {
@@ -525,7 +533,7 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
       </div>
 
       {/* Recommendations */}
-      {analysis.recommendations && analysis.recommendations.length > 0 && (
+      {analysis && analysis.recommendations && analysis.recommendations.length > 0 && (
         <div className="p-6 border-t border-gray-200 dark:border-gray-700 bg-blue-50 dark:bg-blue-900/20">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
@@ -564,14 +572,38 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
             </button>
             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Send Recommendation</h4>
             <form
-              onSubmit={e => {
+              onSubmit={async e => {
                 e.preventDefault();
                 setSending(true);
-                // Placeholder for sending logic
-                setTimeout(() => {
+                setSendError(null);
+                setSendSuccess(null);
+                try {
+                  const response = await fetch(
+                    // Update this URL to your deployed function endpoint if needed
+                    'http://127.0.0.1:5001/project-70cbf/us-central1/sendRecommendationEmail',
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: recipientName,
+                        email: recipientEmail,
+                        recommendation: recommendationToSend,
+                      }),
+                    }
+                  );
+                  const data = await response.json();
+                  if (!response.ok) {
+                    throw new Error(data.error || 'Failed to send email');
+                  }
+                  setSendSuccess('Recommendation sent successfully!');
+                  setTimeout(() => {
+                    setSending(false);
+                    closeSendModal();
+                  }, 1200);
+                } catch (err: any) {
+                  setSendError(err.message || 'Failed to send email');
                   setSending(false);
-                  closeSendModal();
-                }, 1000);
+                }
               }}
               className="space-y-4"
             >
@@ -605,6 +637,12 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
                   required
                 />
               </div>
+              {sendError && (
+                <div className="text-red-600 text-sm">{sendError}</div>
+              )}
+              {sendSuccess && (
+                <div className="text-green-600 text-sm">{sendSuccess}</div>
+              )}
               <button
                 type="submit"
                 className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors font-medium disabled:opacity-60"
