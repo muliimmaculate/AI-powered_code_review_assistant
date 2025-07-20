@@ -3,6 +3,7 @@ const {onRequest} = require("firebase-functions/https");
 const logger = require("firebase-functions/logger");
 const functions = require('firebase-functions');
 const nodemailer = require('nodemailer');
+require("dotenv").config();
 
 setGlobalOptions({ maxInstances: 10 });
 
