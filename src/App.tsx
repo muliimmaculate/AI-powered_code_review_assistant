@@ -43,6 +43,9 @@ function App() {
     setTimeout(() => {
       const detection = hljs.highlightAuto(codeContent);
       const language = detection.language || 'unknown';
+      const lines = codeContent.split('\n');
+      const linesOfCode = lines.length;
+      
       let issues: any[] = [];
       if (language === 'javascript') {
         if (codeContent.includes('var ')) {
@@ -70,10 +73,35 @@ function App() {
           return null;
         }).filter(Boolean);
       }
+      
+      const overallScore = Math.max(0, 100 - (issues.length * 10));
+      
       setAnalysis({
         language,
         issues,
         summary: issues.length ? `${issues.length} issues found.` : 'No issues found.',
+        overallScore,
+        metrics: {
+          linesOfCode,
+          cyclomaticComplexity: Math.floor(linesOfCode / 10) + 1,
+          maintainabilityIndex: overallScore,
+          securityScore: overallScore,
+          performanceScore: overallScore
+        },
+        recommendations: issues.length > 0 ? [
+          'Review and fix the identified issues',
+          'Consider adding more comprehensive error handling',
+          'Ensure code follows best practices'
+        ] : [
+          'Code looks good!',
+          'Consider adding unit tests',
+          'Keep following best practices'
+        ],
+        codeSmells: issues.filter(issue => issue.severity === 'medium' || issue.severity === 'low'),
+        technicalDebt: {
+          estimatedHours: issues.length * 0.5,
+          priority: issues.length > 5 ? 'high' : issues.length > 2 ? 'medium' : 'low'
+        }
       });
       setIsAnalyzing(false);
     }, 800);
