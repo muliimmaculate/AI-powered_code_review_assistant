@@ -69,9 +69,7 @@ exports.sendRecommendationEmail = onRequest(async (req, res) => {
             <span style="color:#2563eb;font-weight:600;font-size:14px;">AI Code Review Assistant</span>
           </div>
         </div>
-        <div style="background:#f1f5f9;padding:12px 0;text-align:center;font-size:13px;color:#64748b;">
-          <span>This is an automated message. Please do not reply.</span>
-        </div>
+      
       </div>
     `,
   };

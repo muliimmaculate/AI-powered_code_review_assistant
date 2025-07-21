@@ -6,6 +6,7 @@ import { CodeInput } from './components/CodeInput';
 import ReviewPanel from './components/ReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
+import TeamDashboard from './components/TeamDashboard';
 import { ChevronDown, Code, Users, UserCheck, History, Settings as SettingsIcon, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -857,8 +858,14 @@ function App() {
                   sessionId={''}
                 />
               )}
-              {activeTab === 'chat' && (
-                <AIChat analysis={analysis ? { ...analysis, score: analysis.score } : null} code={code} />
+              {activeTab === 'team' && (
+                <TeamDashboard />
+              )}
+              {activeTab === 'assignment' && (
+                <ReviewerAssignment /* ...props */ />
+              )}
+              {activeTab === 'history' && (
+                <ReviewHistory /* ...props */ />
               )}
               {activeTab === 'settings' && (
                 <SettingsPanel
@@ -874,11 +881,14 @@ function App() {
                   onSettingsChange={() => {}}
                 />
               )}
+              {activeTab === 'chat' && (
+                <AIChat analysis={analysis ? { ...analysis, score: analysis.score } : null} code={code} />
+              )}
             </div>
-        </div>
-      </main>
-    </div>
-  );
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return <OrganizationRegister onRegistered={handleRegistered} />;

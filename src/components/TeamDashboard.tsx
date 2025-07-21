@@ -28,6 +28,13 @@ interface TeamMember {
   dateJoined?: any;
 }
 
+const roleColors: Record<string, string> = {
+  developer: 'bg-blue-100 text-blue-700',
+  senior: 'bg-sky-100 text-sky-700',
+  lead: 'bg-emerald-100 text-emerald-700',
+  architect: 'bg-purple-100 text-purple-700',
+};
+
 const TeamDashboard: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,6 +56,9 @@ const TeamDashboard: React.FC = () => {
   });
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('all');
 
   const orgDocId = localStorage.getItem('orgDocId');
 
@@ -83,6 +93,7 @@ const TeamDashboard: React.FC = () => {
         linkedin: '',
         dateJoined: ''
       });
+      setShowForm(false);
     } catch (err) {
       setAddError('Failed to add member.');
     }
@@ -110,51 +121,130 @@ const TeamDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [orgDocId]);
 
-  if (loading) {
-    return <div className="bg-gray-800 rounded-lg p-6 text-white">Loading team members...</div>;
-  }
-  if (error) {
-    return <div className="bg-red-900 text-white p-6 rounded-lg">{error}</div>;
-  }
+  const filteredMembers = teamMembers.filter(member =>
+    (roleFilter === 'all' || member.role === roleFilter) &&
+    (member.name.toLowerCase().includes(search.toLowerCase()) || member.email.toLowerCase().includes(search.toLowerCase()))
+  );
+
   return (
-    <div className="bg-gray-800 rounded-lg p-6">
-      {/* Add member form */}
-      <form onSubmit={handleAddMember} className="mb-6 bg-gray-900 p-4 rounded-lg flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Name</label>
-          <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Email</label>
-          <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm" required />
-        </div>
-        <div>
-          <label className="block text-xs text-gray-400 mb-1">Role</label>
-          <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-2 py-1 rounded bg-gray-700 text-white text-sm">
-            <option value="developer">Developer</option>
-            <option value="senior">Senior</option>
-            <option value="lead">Lead</option>
-            <option value="architect">Architect</option>
-          </select>
-        </div>
-        <button type="submit" disabled={adding} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50">{adding ? 'Adding...' : 'Add Member'}</button>
-        {addError && <div className="text-red-400 text-xs ml-2">{addError}</div>}
-      </form>
-      {/* Team member list */}
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2 text-white">Team Members</h3>
-        <ul className="divide-y divide-gray-700">
-          {teamMembers.map(member => (
-            <li key={member.id} className="py-2 flex items-center justify-between">
-              <span>{member.name} ({member.email}) - {member.role}</span>
-            </li>
-          ))}
-        </ul>
+    <div className="max-w-6xl mx-auto p-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">Team Overview</h1>
+        <p className="text-gray-500 dark:text-gray-300">Manage your team members and assignments</p>
       </div>
-      {/* Assignment placeholder */}
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold mb-2 text-white">Assignments</h3>
-        <div className="text-gray-400">[Assignment management UI goes here]</div>
+
+      {/* Add Member Card */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Team Member</h2>
+          <button
+            className="text-blue-600 hover:underline text-sm font-medium"
+            onClick={() => setShowForm(f => !f)}
+          >
+            {showForm ? 'Hide Form' : 'Show Form'}
+          </button>
+        </div>
+        {showForm && (
+          <form onSubmit={handleAddMember} className="flex flex-wrap gap-4 items-end">
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
+              <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-44" required />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Email</label>
+              <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-52" required />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
+              <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                <option value="developer">Developer</option>
+                <option value="senior">Senior</option>
+                <option value="lead">Lead</option>
+                <option value="architect">Architect</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Expertise (comma separated)</label>
+              <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-56" placeholder="e.g. React, Node.js, Python" />
+            </div>
+            <button type="submit" disabled={adding} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">{adding ? 'Adding...' : 'Add Member'}</button>
+            {addError && <div className="text-red-500 text-xs ml-2">{addError}</div>}
+          </form>
+        )}
+      </div>
+
+      {/* Search and Filter */}
+      <div className="flex flex-wrap gap-4 items-center mb-6">
+        <input
+          type="text"
+          placeholder="Search by name or email..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-64"
+        />
+        <select
+          value={roleFilter}
+          onChange={e => setRoleFilter(e.target.value)}
+          className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+        >
+          <option value="all">All Roles</option>
+          <option value="developer">Developer</option>
+          <option value="senior">Senior</option>
+          <option value="lead">Lead</option>
+          <option value="architect">Architect</option>
+        </select>
+      </div>
+
+      {/* Team Members Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-10">
+        {loading ? (
+          <div className="col-span-full text-center text-gray-500 dark:text-gray-400">Loading team members...</div>
+        ) : error ? (
+          <div className="col-span-full text-center text-red-500">{error}</div>
+        ) : filteredMembers.length === 0 ? (
+          <div className="col-span-full text-center text-gray-400">No team members found.</div>
+        ) : filteredMembers.map(member => (
+          <div key={member.id} className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex flex-col gap-3 border border-gray-100 dark:border-gray-700">
+            <div className="flex items-center gap-3 mb-2">
+              {member.avatar ? (
+                <img src={member.avatar} alt={member.name} className="w-12 h-12 rounded-full object-cover border-2 border-blue-200" />
+              ) : (
+                <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-lg border-2 border-blue-200">
+                  {member.name.slice(0,2).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-gray-900 dark:text-white text-lg">{member.name}</span>
+                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[member.role]}`}>{member.role.charAt(0).toUpperCase() + member.role.slice(1)}</span>
+                  {member.isOnline && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full inline-block" title="Online"></span>}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400">{member.email}</div>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {member.expertise && member.expertise.map((exp, idx) => (
+                <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
+              <span><strong>{member.stats.reviewsCompleted}</strong> Reviews</span>
+              <span><strong>{member.stats.codeQualityScore}</strong> Quality</span>
+              <span><strong>{member.stats.issuesFixed}</strong> Issues Fixed</span>
+              <span><strong>{member.stats.linesReviewed}</strong> Lines Reviewed</span>
+            </div>
+            <div className="flex justify-end mt-2">
+              <button className="text-blue-600 hover:underline text-xs font-medium">View Profile</button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Assignments Section */}
+      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6 border border-gray-100 dark:border-gray-700">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">Assignments</h2>
+        <div className="text-gray-400">Assignment management coming soon.</div>
       </div>
     </div>
   );
