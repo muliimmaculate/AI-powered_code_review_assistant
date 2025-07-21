@@ -9,7 +9,7 @@ interface AuthContextType {
   authLoading: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);

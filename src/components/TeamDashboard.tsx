@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { collection, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
+import { AuthContext } from '../AuthContext';
 
 interface TeamMember {
   id: string;
@@ -36,10 +37,11 @@ const roleColors: Record<string, string> = {
 };
 
 const TeamDashboard: React.FC = () => {
+  const { teamMember, authLoading } = useContext(AuthContext) || {};
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState({
+  const [newMember, setNewMember] = useState<Omit<TeamMember, 'id'> & { expertise: string }>({
     name: '',
     email: '',
     avatar: '',
@@ -62,7 +64,7 @@ const TeamDashboard: React.FC = () => {
 
   const orgDocId = localStorage.getItem('orgDocId');
 
-  const handleAddMember = async (e: React.FormEvent) => {
+  const handleAddMember = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setAddError(null);
     setAdding(true);
@@ -113,7 +115,7 @@ const TeamDashboard: React.FC = () => {
         setTeamMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember)));
         setLoading(false);
       },
-      (err) => {
+      () => {
         setError('Failed to load team members.');
         setLoading(false);
       }
@@ -126,53 +128,85 @@ const TeamDashboard: React.FC = () => {
     (member.name.toLowerCase().includes(search.toLowerCase()) || member.email.toLowerCase().includes(search.toLowerCase()))
   );
 
+  if (authLoading || loading) {
+    return <div className="bg-gray-800 rounded-lg p-6 text-white">Loading team members...</div>;
+  }
+  if (!teamMember) {
+    return <div className="bg-red-900 text-white p-6 rounded-lg text-center">Access denied. You are not a member of this team.</div>;
+  }
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">Team Overview</h1>
-        <p className="text-gray-500 dark:text-gray-300">Manage your team members and assignments</p>
+      {/* My Profile Card */}
+      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex items-center gap-6 border border-gray-100 dark:border-gray-700">
+        {teamMember.avatar ? (
+          <img src={teamMember.avatar} alt={teamMember.name} className="w-16 h-16 rounded-full object-cover border-2 border-blue-200" />
+        ) : (
+          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-2xl border-2 border-blue-200">
+            {teamMember.name.slice(0,2).toUpperCase()}
+          </div>
+        )}
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-gray-900 dark:text-white text-xl">{teamMember.name}</span>
+            <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[teamMember.role]}`}>{teamMember.role.charAt(0).toUpperCase() + teamMember.role.slice(1)}</span>
+            {teamMember.isOnline && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full inline-block" title="Online"></span>}
+          </div>
+          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{teamMember.email}</div>
+          <div className="flex flex-wrap gap-2 mb-1">
+            {teamMember.expertise && teamMember.expertise.map((exp, idx) => (
+              <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
+            <span><strong>{teamMember.stats?.reviewsCompleted || 0}</strong> Reviews</span>
+            <span><strong>{teamMember.stats?.codeQualityScore || 0}</strong> Quality</span>
+            <span><strong>{teamMember.stats?.issuesFixed || 0}</strong> Issues Fixed</span>
+            <span><strong>{teamMember.stats?.linesReviewed || 0}</strong> Lines Reviewed</span>
+          </div>
+        </div>
       </div>
 
-      {/* Add Member Card */}
-      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Team Member</h2>
-          <button
-            className="text-blue-600 hover:underline text-sm font-medium"
-            onClick={() => setShowForm(f => !f)}
-          >
-            {showForm ? 'Hide Form' : 'Show Form'}
-          </button>
+      {/* Add Member Card (only for lead/architect) */}
+      {(teamMember.role === 'lead' || teamMember.role === 'architect') && (
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Team Member</h2>
+            <button
+              className="text-blue-600 hover:underline text-sm font-medium"
+              onClick={() => setShowForm(f => !f)}
+            >
+              {showForm ? 'Hide Form' : 'Show Form'}
+            </button>
+          </div>
+          {showForm && (
+            <form onSubmit={handleAddMember} className="flex flex-wrap gap-4 items-end">
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
+                <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-44" required />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Email</label>
+                <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-52" required />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
+                <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                  <option value="developer">Developer</option>
+                  <option value="senior">Senior</option>
+                  <option value="lead">Lead</option>
+                  <option value="architect">Architect</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Expertise (comma separated)</label>
+                <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-56" placeholder="e.g. React, Node.js, Python" />
+              </div>
+              <button type="submit" disabled={adding} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">{adding ? 'Adding...' : 'Add Member'}</button>
+              {addError && <div className="text-red-500 text-xs ml-2">{addError}</div>}
+            </form>
+          )}
         </div>
-        {showForm && (
-          <form onSubmit={handleAddMember} className="flex flex-wrap gap-4 items-end">
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
-              <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-44" required />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Email</label>
-              <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-52" required />
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
-              <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-                <option value="developer">Developer</option>
-                <option value="senior">Senior</option>
-                <option value="lead">Lead</option>
-                <option value="architect">Architect</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Expertise (comma separated)</label>
-              <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-56" placeholder="e.g. React, Node.js, Python" />
-            </div>
-            <button type="submit" disabled={adding} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">{adding ? 'Adding...' : 'Add Member'}</button>
-            {addError && <div className="text-red-500 text-xs ml-2">{addError}</div>}
-          </form>
-        )}
-      </div>
+      )}
 
       {/* Search and Filter */}
       <div className="flex flex-wrap gap-4 items-center mb-6">
@@ -198,9 +232,7 @@ const TeamDashboard: React.FC = () => {
 
       {/* Team Members Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-10">
-        {loading ? (
-          <div className="col-span-full text-center text-gray-500 dark:text-gray-400">Loading team members...</div>
-        ) : error ? (
+        {error ? (
           <div className="col-span-full text-center text-red-500">{error}</div>
         ) : filteredMembers.length === 0 ? (
           <div className="col-span-full text-center text-gray-400">No team members found.</div>
