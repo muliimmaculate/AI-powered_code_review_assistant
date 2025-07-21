@@ -55,7 +55,19 @@ interface AppAnalysis {
     performanceIssues: number;
     qualityIssues: number;
   };
-  metrics: any;
+  metrics: {
+    complexity: number;
+    maintainability: number;
+    readability: number;
+    performance: number;
+    security: number;
+    documentation: number;
+    cyclomaticComplexity: number;
+    cognitiveComplexity: number;
+    linesOfCode: number;
+    duplicateLines: number;
+    testCoverage: number;
+  };
   recommendations: string[];
   codeSmells: number;
   technicalDebt: string;
@@ -103,7 +115,7 @@ function App() {
       let currentNesting = 0;
       let maxCurrentNesting = 0;
       const lineMap: { [key: string]: number } = {};
-      let blockBuffer: string[] = [];
+      const blockBuffer: string[] = [];
       let unreachableCodeCount = 0;
       let missingDefaultSwitch = 0;
       let unusedParamsCount = 0;
@@ -168,6 +180,56 @@ function App() {
             confidence: 80,
             impact: 'medium',
             effort: 'easy'
+          });
+        }
+        // Security: detect eval, Function constructor, hardcoded credentials
+        if (/\beval\s*\(/.test(codeContent) || /new Function\s*\(/.test(codeContent)) {
+          issues.push({
+            type: 'security',
+            severity: 'critical',
+            category: 'Security',
+            message: 'Use of eval or Function constructor detected',
+            line: 1,
+            column: 1,
+            code: '',
+            suggestion: 'Avoid using eval or Function constructor for security reasons',
+            fixedCode: '',
+            confidence: 95,
+            impact: 'high',
+            effort: 'high'
+          });
+        }
+        if (/password\s*=\s*['"].+['"]/i.test(codeContent) || /api[_-]?key\s*=\s*['"].+['"]/i.test(codeContent)) {
+          issues.push({
+            type: 'security',
+            severity: 'high',
+            category: 'Security',
+            message: 'Possible hardcoded credential detected',
+            line: 1,
+            column: 1,
+            code: '',
+            suggestion: 'Do not hardcode credentials in code',
+            fixedCode: '',
+            confidence: 90,
+            impact: 'high',
+            effort: 'high'
+          });
+        }
+        // Performance: detect sync file/network operations
+        if (/require\(['"]fs['"]\)\.readFileSync/.test(codeContent) || /XMLHttpRequest\s*\(/.test(codeContent)) {
+          issues.push({
+            type: 'performance',
+            severity: 'high',
+            category: 'Performance',
+            message: 'Synchronous file or network operation detected',
+            line: 1,
+            column: 1,
+            code: '',
+            suggestion: 'Use asynchronous APIs for file and network operations',
+            fixedCode: '',
+            confidence: 85,
+            impact: 'high',
+            effort: 'medium'
           });
         }
       } else if (language === 'python') {
@@ -306,7 +368,6 @@ function App() {
       // --- Advanced Checks ---
       // Track function signatures and returns for advanced checks
       let currentFunctionParams: string[] = [];
-      let currentFunctionReturns: string[] = [];
       let insideSwitch = false;
       let hasDefaultInSwitch = false;
       let functionStartLine = 0;
@@ -316,21 +377,55 @@ function App() {
       lines.forEach((line, idx) => {
         const trimmed = line.trim();
         // Suspicious comments
-        if (/\b(HACK|BUG|XXX|FIXME)\b/i.test(trimmed)) {
+        if (/\b(HACK|BUG|XXX|FIXME|TODO|TEMP)\b/i.test(trimmed)) {
           suspiciousCommentCount++;
           issues.push({
             type: 'comment',
             severity: 'medium',
             category: 'Comment',
-            message: `Suspicious comment at line ${idx + 1}`,
+            message: `Suspicious or temporary comment at line ${idx + 1}`,
             line: idx + 1,
             column: 1,
             code: trimmed,
-            suggestion: 'Clarify or address this comment',
+            suggestion: 'Clarify, address, or remove this comment',
             fixedCode: '',
             confidence: 80,
             impact: 'medium',
             effort: 'easy'
+          });
+        }
+        // Anti-pattern: deeply nested callbacks (callback hell)
+        if ((trimmed.match(/function\s*\(/g) || []).length > 0 && (trimmed.match(/\{/g) || []).length > 1 && currentNesting > 3) {
+          issues.push({
+            type: 'anti-pattern',
+            severity: 'high',
+            category: 'Code Quality',
+            message: `Deeply nested callback detected at line ${idx + 1}`,
+            line: idx + 1,
+            column: 1,
+            code: trimmed,
+            suggestion: 'Refactor to use async/await or Promises to reduce nesting',
+            fixedCode: '',
+            confidence: 85,
+            impact: 'high',
+            effort: 'medium'
+          });
+        }
+        // Anti-pattern: empty catch blocks
+        if (/catch\s*\(.*\)\s*\{\s*\}/.test(trimmed)) {
+          issues.push({
+            type: 'anti-pattern',
+            severity: 'medium',
+            category: 'Code Quality',
+            message: `Empty catch block at line ${idx + 1}`,
+            line: idx + 1,
+            column: 1,
+            code: trimmed,
+            suggestion: 'Handle errors properly in catch blocks',
+            fixedCode: '',
+            confidence: 80,
+            impact: 'medium',
+            effort: 'medium'
           });
         }
         // Unreachable code after return/throw/break/continue
@@ -506,13 +601,13 @@ function App() {
       // --- Recommendations ---
       const recommendations: string[] = [];
       if (syntaxError) recommendations.push('Fix all syntax errors before running the code.');
-      if (longFunctions > 0) recommendations.push('Split long functions into smaller, focused ones.');
-      if (maxNesting > 3) recommendations.push('Reduce nesting for better readability.');
+      if (longFunctions > 0) recommendations.push('Split long functions into smaller, focused ones. Consider extracting helpers for repeated logic.');
+      if (maxNesting > 3) recommendations.push('Reduce nesting for better readability. Use early returns or helper functions.');
       if (duplicateLines > 0) recommendations.push('Remove duplicate lines of code.');
-      if (duplicateBlocks > 0) recommendations.push('Refactor duplicate code blocks into functions.');
+      if (duplicateBlocks > 0) recommendations.push('Refactor duplicate code blocks into functions or modules.');
       if (inconsistentNaming) recommendations.push('Use consistent variable naming (camelCase or snake_case, not both).');
       if (functionCount === 0) recommendations.push('Consider organizing code into functions for better structure.');
-      if (commentLines / linesOfCode < 0.05) recommendations.push('Add more comments to explain complex logic.');
+      if (commentLines / linesOfCode < 0.05) recommendations.push('Add more comments to explain complex logic. Consider documenting functions and modules.');
       if (deadCodeCount > 0) recommendations.push('Remove unused variables or functions (dead code).');
       if (magicNumberCount > 0) recommendations.push('Replace magic numbers with named constants.');
       if (unreachableCodeCount > 0) recommendations.push('Remove or refactor unreachable code.');
@@ -522,8 +617,12 @@ function App() {
       if (longParamListCount > 0) recommendations.push('Refactor functions with long parameter lists to use objects or fewer parameters.');
       if (linesOfCode > 300) recommendations.push('Split long files into smaller modules.');
       if (functionCount > 10) recommendations.push('Reduce the number of functions in a single file.');
-      if (suspiciousCommentCount > 0) recommendations.push('Clarify or address suspicious comments (HACK, BUG, XXX, FIXME).');
+      if (suspiciousCommentCount > 0) recommendations.push('Clarify or address suspicious or temporary comments (HACK, BUG, XXX, FIXME, TODO, TEMP).');
+      if (issues.some(i => i.type === 'security')) recommendations.push('Address all security issues immediately. Never use eval or hardcoded credentials.');
+      if (issues.some(i => i.type === 'performance')) recommendations.push('Refactor synchronous file or network operations to be asynchronous.');
+      if (issues.some(i => i.type === 'anti-pattern')) recommendations.push('Refactor anti-patterns such as deeply nested callbacks and empty catch blocks.');
       if (!/test|spec|assert|expect/.test(codeContent)) recommendations.push('Consider adding tests to improve code reliability.');
+      if (!/^\s*\/\*\*.*\*\//ms.test(codeContent)) recommendations.push('Add a file/module-level documentation comment at the top.');
       if (recommendations.length === 0) recommendations.push('Code looks good! Keep following best practices.');
       // --- Metrics ---
       const metrics = {
@@ -570,10 +669,7 @@ function App() {
     console.log('orgStatus:', orgStatus);
   }, [orgDocId, orgStatus]);
 
-  // Show SuperadminDashboard at /superadmin
-  if (window.location.pathname === '/superadmin') {
-    return <SuperadminDashboard />;
-  }
+  const isSuperadmin = window.location.pathname === '/superadmin';
 
   useEffect(() => {
     if (!orgDocId) return;
@@ -597,6 +693,10 @@ function App() {
     });
     return () => { unsub(); if (approvalTimeoutRef.current) clearTimeout(approvalTimeoutRef.current); };
   }, [orgDocId]);
+
+  if (isSuperadmin) {
+    return <SuperadminDashboard />;
+  }
 
   // Handler for registration completion
   const handleRegistered = (docId: string) => {
