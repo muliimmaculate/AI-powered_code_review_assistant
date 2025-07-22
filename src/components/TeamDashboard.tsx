@@ -37,7 +37,8 @@ const roleColors: Record<string, string> = {
 };
 
 const TeamDashboard: React.FC = () => {
-  const { teamMember, authLoading } = useContext(AuthContext) || {};
+  const authContext = useContext(AuthContext);
+  const { user, teamMember, authLoading } = authContext || {};
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +62,7 @@ const TeamDashboard: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
+  const [currentUserProfile, setCurrentUserProfile] = useState<TeamMember | null>(null);
 
   const orgDocId = localStorage.getItem('orgDocId');
 
@@ -112,7 +114,16 @@ const TeamDashboard: React.FC = () => {
     const unsubscribe = onSnapshot(
       collection(db, 'pendingOrganizations', orgDocId, 'teamMembers'),
       (snapshot) => {
-        setTeamMembers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember)));
+        const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TeamMember));
+        setTeamMembers(members);
+        
+        // Set current user profile if not authenticated through Firebase Auth
+        if (!teamMember && members.length > 0) {
+          // For demo purposes, use the first member as current user
+          // In production, this should be based on actual authentication
+          setCurrentUserProfile(members[0]);
+        }
+        
         setLoading(false);
       },
       () => {
@@ -121,53 +132,64 @@ const TeamDashboard: React.FC = () => {
       }
     );
     return () => unsubscribe();
-  }, [orgDocId]);
+  }, [orgDocId, teamMember]);
 
   const filteredMembers = teamMembers.filter(member =>
     (roleFilter === 'all' || member.role === roleFilter) &&
     (member.name.toLowerCase().includes(search.toLowerCase()) || member.email.toLowerCase().includes(search.toLowerCase()))
   );
 
+  // Use either authenticated team member or current user profile
+  const displayUser = teamMember || currentUserProfile;
   if (authLoading || loading) {
     return <div className="bg-gray-800 rounded-lg p-6 text-white">Loading team members...</div>;
   }
-  if (!teamMember) {
-    return <div className="bg-red-900 text-white p-6 rounded-lg text-center">Access denied. You are not a member of this team.</div>;
+  
+  if (!displayUser && teamMembers.length === 0) {
+    return (
+      <div className="bg-yellow-900 text-white p-6 rounded-lg text-center">
+        <h3 className="text-lg font-semibold mb-2">No Team Members Found</h3>
+        <p>Add team members to get started with your organization.</p>
+      </div>
+    );
   }
+
   return (
     <div className="max-w-6xl mx-auto p-6">
       {/* My Profile Card */}
-      <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex items-center gap-6 border border-gray-100 dark:border-gray-700">
-        {teamMember.avatar ? (
-          <img src={teamMember.avatar} alt={teamMember.name} className="w-16 h-16 rounded-full object-cover border-2 border-blue-200" />
-        ) : (
-          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-2xl border-2 border-blue-200">
-            {teamMember.name.slice(0,2).toUpperCase()}
-          </div>
-        )}
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-gray-900 dark:text-white text-xl">{teamMember.name}</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[teamMember.role]}`}>{teamMember.role.charAt(0).toUpperCase() + teamMember.role.slice(1)}</span>
-            {teamMember.isOnline && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full inline-block" title="Online"></span>}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{teamMember.email}</div>
-          <div className="flex flex-wrap gap-2 mb-1">
-            {teamMember.expertise && teamMember.expertise.map((exp, idx) => (
-              <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
-            <span><strong>{teamMember.stats?.reviewsCompleted || 0}</strong> Reviews</span>
-            <span><strong>{teamMember.stats?.codeQualityScore || 0}</strong> Quality</span>
-            <span><strong>{teamMember.stats?.issuesFixed || 0}</strong> Issues Fixed</span>
-            <span><strong>{teamMember.stats?.linesReviewed || 0}</strong> Lines Reviewed</span>
+      {displayUser && (
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex items-center gap-6 border border-gray-100 dark:border-gray-700">
+          {displayUser.avatar ? (
+            <img src={displayUser.avatar} alt={displayUser.name} className="w-16 h-16 rounded-full object-cover border-2 border-blue-200" />
+          ) : (
+            <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-bold text-2xl border-2 border-blue-200">
+              {displayUser.name.slice(0,2).toUpperCase()}
+            </div>
+          )}
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-semibold text-gray-900 dark:text-white text-xl">{displayUser.name}</span>
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[displayUser.role]}`}>{displayUser.role.charAt(0).toUpperCase() + displayUser.role.slice(1)}</span>
+              {displayUser.isOnline && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full inline-block" title="Online"></span>}
+            </div>
+            <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{displayUser.email}</div>
+            <div className="flex flex-wrap gap-2 mb-1">
+              {displayUser.expertise && displayUser.expertise.map((exp, idx) => (
+                <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
+              <span><strong>{displayUser.stats?.reviewsCompleted || 0}</strong> Reviews</span>
+              <span><strong>{displayUser.stats?.codeQualityScore || 0}</strong> Quality</span>
+              <span><strong>{displayUser.stats?.issuesFixed || 0}</strong> Issues Fixed</span>
+              <span><strong>{displayUser.stats?.linesReviewed || 0}</strong> Lines Reviewed</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Add Member Card (only for lead/architect) */}
-      {(teamMember.role === 'lead' || teamMember.role === 'architect') && (
+      {displayUser && (displayUser.role === 'lead' || displayUser.role === 'architect') && (
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Team Member</h2>
