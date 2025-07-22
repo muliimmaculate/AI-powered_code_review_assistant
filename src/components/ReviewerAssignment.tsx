@@ -48,10 +48,9 @@ interface AssignmentSuggestion {
 interface ReviewerAssignmentProps {
   teamMembers?: Developer[];
   onAssign?: (reviewers: string[]) => void;
+  theme?: 'dark' | 'light';
 }
 
-export const ReviewerAssignment: React.FC<ReviewerAssignmentProps & { theme: 'dark' | 'light' }> = (props) => {
-  const { theme, ...rest } = props;
   const [developers] = useState<Developer[]>(rest.teamMembers || [
     {
       id: '1',

@@ -63,8 +63,22 @@ const TeamDashboard: React.FC = () => {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [currentUserProfile, setCurrentUserProfile] = useState<TeamMember | null>(null);
+  const [teamMemberFromStorage, setTeamMemberFromStorage] = useState<any>(null);
 
   const orgDocId = localStorage.getItem('orgDocId');
+
+  // Check for team member from localStorage
+  useEffect(() => {
+    const storedMember = localStorage.getItem('teamMember');
+    if (storedMember) {
+      try {
+        const member = JSON.parse(storedMember);
+        setTeamMemberFromStorage(member);
+      } catch (error) {
+        console.error('Error parsing stored team member:', error);
+      }
+    }
+  }, []);
 
   // Add sample team members on first load if none exist
   useEffect(() => {
@@ -192,7 +206,10 @@ const TeamDashboard: React.FC = () => {
   );
 
   // Use either authenticated team member or current user profile
-  const displayUser = teamMember || currentUserProfile;
+  const displayUser = teamMember || teamMemberFromStorage || currentUserProfile;
+  const isAdmin = displayUser && ['lead', 'architect'].includes(displayUser.role);
+  const canAddMembers = isAdmin || !teamMemberFromStorage; // Allow if admin or if not a team member login
+
   if (authLoading || loading) {
     return <div className="bg-gray-800 rounded-lg p-6 text-white">Loading team members...</div>;
   }
@@ -257,7 +274,7 @@ const TeamDashboard: React.FC = () => {
       )}
 
       {/* Add Member Card (only for lead/architect) */}
-      {(
+      {canAddMembers && (
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white">Add Team Member</h2>
@@ -350,6 +367,18 @@ const TeamDashboard: React.FC = () => {
               {addError && <div className="text-red-500 text-sm bg-red-50 dark:bg-red-900/20 p-3 rounded-lg">{addError}</div>}
             </form>
           )}
+        </div>
+      )}
+
+      {!canAddMembers && (
+        <div className="mb-8 bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
+          <div className="text-center">
+            <User className="w-12 h-12 text-blue-600 dark:text-blue-400 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">Team Member View</h3>
+            <p className="text-blue-700 dark:text-blue-300 text-sm">
+              You're logged in as a team member. Contact your team lead or architect to add new members.
+            </p>
+          </div>
         </div>
       )}
 
