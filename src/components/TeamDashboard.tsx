@@ -59,12 +59,64 @@ const TeamDashboard: React.FC = () => {
   });
   const [addError, setAddError] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm] = useState(true); // Always show form initially
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [currentUserProfile, setCurrentUserProfile] = useState<TeamMember | null>(null);
 
   const orgDocId = localStorage.getItem('orgDocId');
+
+  // Add sample team members on first load if none exist
+  useEffect(() => {
+    const addSampleMembers = async () => {
+      if (!orgDocId || teamMembers.length > 0) return;
+      
+      const sampleMembers = [
+        {
+          name: 'John Doe',
+          email: 'john.doe@company.com',
+          avatar: '',
+          role: 'lead',
+          expertise: ['React', 'TypeScript', 'Node.js'],
+          isOnline: true,
+          stats: { reviewsCompleted: 25, codeQualityScore: 85, issuesFixed: 12, linesReviewed: 5000 },
+          activity: { lastActive: Timestamp.fromDate(new Date()), currentStreak: 5, totalContributions: 50 },
+          phone: '+1-555-0123',
+          location: 'San Francisco, CA',
+          bio: 'Senior developer with 8 years of experience',
+          linkedin: 'https://linkedin.com/in/johndoe',
+          dateJoined: Timestamp.fromDate(new Date())
+        },
+        {
+          name: 'Jane Smith',
+          email: 'jane.smith@company.com',
+          avatar: '',
+          role: 'senior',
+          expertise: ['Python', 'Django', 'PostgreSQL'],
+          isOnline: false,
+          stats: { reviewsCompleted: 18, codeQualityScore: 92, issuesFixed: 8, linesReviewed: 3200 },
+          activity: { lastActive: Timestamp.fromDate(new Date(Date.now() - 2 * 60 * 60 * 1000)), currentStreak: 3, totalContributions: 35 },
+          phone: '+1-555-0124',
+          location: 'New York, NY',
+          bio: 'Backend specialist focused on scalable systems',
+          linkedin: 'https://linkedin.com/in/janesmith',
+          dateJoined: Timestamp.fromDate(new Date(Date.now() - 30 * 24 * 60 * 60 * 1000))
+        }
+      ];
+
+      try {
+        for (const member of sampleMembers) {
+          await addDoc(collection(db, 'pendingOrganizations', orgDocId, 'teamMembers'), member);
+        }
+      } catch (error) {
+        console.error('Error adding sample members:', error);
+      }
+    };
+
+    // Add sample members after a short delay to ensure component is mounted
+    const timer = setTimeout(addSampleMembers, 1000);
+    return () => clearTimeout(timer);
+  }, [orgDocId, teamMembers.length]);
 
   const handleAddMember = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -189,10 +241,11 @@ const TeamDashboard: React.FC = () => {
       )}
 
       {/* Add Member Card (only for lead/architect) */}
-      {displayUser && (displayUser.role === 'lead' || displayUser.role === 'architect') && (
+      {(
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Add Team Member</h2>
+            {/* Form is now always visible for easier access */}
             <button
               className="text-blue-600 hover:underline text-sm font-medium"
               onClick={() => setShowForm(f => !f)}
@@ -201,18 +254,36 @@ const TeamDashboard: React.FC = () => {
             </button>
           </div>
           {showForm && (
-            <form onSubmit={handleAddMember} className="flex flex-wrap gap-4 items-end">
+            <form onSubmit={handleAddMember} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Name</label>
-                <input type="text" value={newMember.name} onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-44" required />
+                <input 
+                  type="text" 
+                  value={newMember.name} 
+                  onChange={e => setNewMember(n => ({ ...n, name: e.target.value }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" 
+                  placeholder="Enter full name"
+                  required 
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Email</label>
-                <input type="email" value={newMember.email} onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-52" required />
+                <input 
+                  type="email" 
+                  value={newMember.email} 
+                  onChange={e => setNewMember(n => ({ ...n, email: e.target.value }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" 
+                  placeholder="email@company.com"
+                  required 
+                />
               </div>
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
-                <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
+                <select 
+                  value={newMember.role} 
+                  onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+                >
                   <option value="developer">Developer</option>
                   <option value="senior">Senior</option>
                   <option value="lead">Lead</option>
@@ -221,9 +292,43 @@ const TeamDashboard: React.FC = () => {
               </div>
               <div>
                 <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Expertise (comma separated)</label>
-                <input type="text" value={newMember.expertise} onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-56" placeholder="e.g. React, Node.js, Python" />
+                <input 
+                  type="text" 
+                  value={newMember.expertise} 
+                  onChange={e => setNewMember(n => ({ ...n, expertise: e.target.value }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" 
+                  placeholder="e.g. React, Node.js, Python" 
+                />
               </div>
-              <button type="submit" disabled={adding} className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium">{adding ? 'Adding...' : 'Add Member'}</button>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Phone (optional)</label>
+                <input 
+                  type="tel" 
+                  value={newMember.phone} 
+                  onChange={e => setNewMember(n => ({ ...n, phone: e.target.value }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" 
+                  placeholder="+1-555-0123" 
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Location (optional)</label>
+                <input 
+                  type="text" 
+                  value={newMember.location} 
+                  onChange={e => setNewMember(n => ({ ...n, location: e.target.value }))} 
+                  className="w-full px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" 
+                  placeholder="City, State" 
+                />
+              </div>
+              <div className="md:col-span-2 lg:col-span-3">
+                <button 
+                  type="submit" 
+                  disabled={adding} 
+                  className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 text-sm font-medium"
+                >
+                  {adding ? 'Adding...' : 'Add Team Member'}
+                </button>
+              </div>
               {addError && <div className="text-red-500 text-xs ml-2">{addError}</div>}
             </form>
           )}
