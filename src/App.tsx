@@ -885,10 +885,10 @@ function App() {
                 <AIChat analysis={analysis ? { ...analysis, score: analysis.score } : null} code={code} />
               )}
             </div>
-          </div>
-        </main>
-      </div>
-    );
+        </div>
+      </main>
+    </div>
+  );
   }
 
   return <OrganizationRegister onRegistered={handleRegistered} />;
