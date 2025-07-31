@@ -1,12 +1,15 @@
 import React, { useEffect, useState, useRef } from 'react';
 import OrganizationRegister from './components/OrganizationRegister';
 import SuperadminDashboard from './components/SuperadminDashboard';
+import TeamMemberLogin from './components/TeamMemberLogin';
 import { Header } from './components/Header';
 import { CodeInput } from './components/CodeInput';
 import ReviewPanel from './components/ReviewPanel';
 import { SettingsPanel } from './components/SettingsPanel';
 import { AIChat } from './components/AIChat';
 import TeamDashboard from './components/TeamDashboard';
+import { ReviewHistory } from './components/ReviewHistory';
+import { ReviewerAssignment } from './components/ReviewerAssignment';
 import { ChevronDown, Code, Users, UserCheck, History, Settings as SettingsIcon, MessageSquare } from 'lucide-react';
 import { db } from './firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -86,6 +89,23 @@ function App() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [customRules] = useState<unknown[]>([]);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'member'>('admin');
+
+  // Check for team member login
+  useEffect(() => {
+    const teamMember = localStorage.getItem('teamMember');
+    if (teamMember) {
+      try {
+        const member = JSON.parse(teamMember);
+        setCurrentUser(member);
+        setUserRole('member');
+      } catch (error) {
+        console.error('Error parsing team member data:', error);
+        localStorage.removeItem('teamMember');
+      }
+    }
+  }, []);
 
   // Language detection and analysis
   const analyzeCode = async (codeContent: string) => {
@@ -699,6 +719,11 @@ function App() {
     return <SuperadminDashboard />;
   }
 
+  // Team member login flow
+  if (orgDocId && orgStatus === 'approved' && !currentUser) {
+    return <TeamMemberLogin />;
+  }
+
   // Handler for registration completion
   const handleRegistered = (docId: string) => {
     setOrgDocId(docId);
@@ -751,16 +776,21 @@ function App() {
     const allTabs = [
       { id: 'review', label: 'Review', icon: Code, primary: true },
       { id: 'team', label: 'Team', icon: Users, primary: true },
-      { id: 'assignment', label: 'Assign', icon: UserCheck, primary: false },
+      { id: 'assignment', label: 'Assign', icon: UserCheck, primary: userRole === 'admin' },
       { id: 'history', label: 'History', icon: History, primary: false },
       { id: 'chat', label: 'AI Chat', icon: MessageSquare, primary: false },
       { id: 'settings', label: 'Settings', icon: SettingsIcon, primary: false }
     ];
     const primaryTabs = allTabs.filter(tab => tab.primary);
     const secondaryTabs = allTabs.filter(tab => !tab.primary);
+
     return (
       <div className="min-h-screen w-full bg-gray-900 text-white transition-colors duration-300">
-        <Header />
+        <Header currentUser={currentUser} userRole={userRole} onLogout={() => {
+          localStorage.removeItem('teamMember');
+          setCurrentUser(null);
+          setUserRole('admin');
+        }} />
         <main className="container mx-auto px-4 sm:px-6 py-4 sm:py-8">
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 sm:gap-8">
             {/* Left Panel - Code Input (only show for certain tabs) */}
@@ -862,10 +892,10 @@ function App() {
                 <TeamDashboard />
               )}
               {activeTab === 'assignment' && (
-                <ReviewerAssignment /* ...props */ />
+                <ReviewerAssignment theme="dark" />
               )}
               {activeTab === 'history' && (
-                <ReviewHistory /* ...props */ />
+                <ReviewHistory />
               )}
               {activeTab === 'settings' && (
                 <SettingsPanel
