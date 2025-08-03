@@ -3,19 +3,7 @@ const {onRequest} = require("firebase-functions/https");
 const logger = require("firebase-functions/logger");
 const functions = require('firebase-functions');
 const nodemailer = require('nodemailer');
-require("dotenv").config();
 
-setGlobalOptions({ maxInstances: 10 });
-
-
-
-const transporter = nodemailer.createTransport({
-  service: 'gmail', 
-  auth: {
-    user: process.env.EMAIL_USER, 
-    pass: process.env.EMAIL_PASS,
-  },
-});
 
 // Cloud Function to send recommendation email
 exports.sendRecommendationEmail = onRequest(async (req, res) => {
