@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { collection, onSnapshot, addDoc, Timestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, Timestamp } from 'firebase/firestore';
 import { db } from '../firebase';
 import { AuthContext } from '../AuthContext';
+import { User } from 'lucide-react';
 
 interface TeamMember {
   id: string;
@@ -17,7 +18,7 @@ interface TeamMember {
     linesReviewed: number;
   };
   activity: {
-    lastActive: Date;
+    lastActive: Date | Timestamp;
     currentStreak: number;
     totalContributions: number;
   };
@@ -26,7 +27,7 @@ interface TeamMember {
   location?: string;
   bio?: string;
   linkedin?: string;
-  dateJoined?: any;
+  dateJoined?: Date | Timestamp;
 }
 
 const roleColors: Record<string, string> = {
@@ -36,34 +37,34 @@ const roleColors: Record<string, string> = {
   architect: 'bg-purple-100 text-purple-700',
 };
 
-const sendInviteEmail = async (name: string, email: string) => {
-  await fetch('/sendRecommendationEmail', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name,
-      email,
-      recommendation: [
-        'Welcome to the team! You have been added to the AI Code Review Assistant system.',
-        'Please log in using your email address.',
-        'If you do not have a password, use the "Forgot Password" link to set one.',
-        'Access the dashboard here: [Login Page URL]'
-      ]
-    })
-  });
-};
-
 const TeamDashboard: React.FC = () => {
   const authContext = useContext(AuthContext);
-  const { user, teamMember, authLoading } = authContext || {};
+  const { teamMember, authLoading } = authContext || {};
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [newMember, setNewMember] = useState<Omit<TeamMember, 'id' | 'expertise'>>({
+  type NewMemberForm = {
+    name: string;
+    email: string;
+    avatar: string;
+    role: TeamMember['role'];
+    expertise: string;
+    isOnline: boolean;
+    stats: TeamMember['stats'];
+    activity: TeamMember['activity'];
+    phone?: string;
+    location?: string;
+    bio?: string;
+    linkedin?: string;
+    dateJoined?: Date | Timestamp;
+  };
+
+  const [newMember, setNewMember] = useState<NewMemberForm>({
     name: '',
     email: '',
     avatar: '',
     role: 'developer',
+    expertise: '',
     isOnline: false,
     stats: { reviewsCompleted: 0, codeQualityScore: 0, issuesFixed: 0, linesReviewed: 0 },
     activity: { lastActive: new Date(), currentStreak: 0, totalContributions: 0 },
@@ -71,29 +72,15 @@ const TeamDashboard: React.FC = () => {
     location: '',
     bio: '',
     linkedin: '',
-    dateJoined: ''
+    dateJoined: undefined
   });
-  const [expertiseInput, setExpertiseInput] = useState<string>('');
   const [addError, setAddError] = useState<string | null>(null);
-<<<<<<< HEAD
-  const [adding, setAdding] = useState<boolean>(false);
-  const [showForm, setShowForm] = useState<boolean>(false);
-  const [search, setSearch] = useState<string>('');
-  const [roleFilter, setRoleFilter] = useState<string>('all');
-  const [editMember, setEditMember] = useState<TeamMember | null>(null);
-  const [editModalOpen, setEditModalOpen] = useState<boolean>(false);
-  const [editExpertiseInput, setEditExpertiseInput] = useState<string>('');
-  const [deleteMemberId, setDeleteMemberId] = useState<string | null>(null);
-  const [profileEdit, setProfileEdit] = useState<boolean>(false);
-  const [profileForm, setProfileForm] = useState<{ avatar: string; expertise: string; bio: string } | null>(null);
-=======
   const [adding, setAdding] = useState(false);
   const [showForm, setShowForm] = useState(true); // Always show form initially
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [currentUserProfile, setCurrentUserProfile] = useState<TeamMember | null>(null);
-  const [teamMemberFromStorage, setTeamMemberFromStorage] = useState<any>(null);
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
+  const [teamMemberFromStorage, setTeamMemberFromStorage] = useState<Partial<TeamMember> | null>(null);
 
   const orgDocId = localStorage.getItem('orgDocId');
 
@@ -171,19 +158,19 @@ const TeamDashboard: React.FC = () => {
       await addDoc(collection(db, 'pendingOrganizations', orgDocId, 'teamMembers'), {
         ...newMember,
         email: newMember.email.trim().toLowerCase(),
-        expertise: expertiseInput.split(',').map((s: string) => s.trim()).filter((s: string) => !!s),
+        expertise: newMember.expertise.split(',').map(s => s.trim()).filter(Boolean),
         activity: {
           ...newMember.activity,
           lastActive: Timestamp.fromDate(new Date()),
         },
-        dateJoined: newMember.dateJoined ? Timestamp.fromDate(new Date(newMember.dateJoined)) : Timestamp.fromDate(new Date()),
+        dateJoined: Timestamp.fromDate(new Date()),
       });
-      await sendInviteEmail(newMember.name, newMember.email.trim().toLowerCase());
       setNewMember({
         name: '',
         email: '',
         avatar: '',
         role: 'developer',
+        expertise: '',
         isOnline: false,
         stats: { reviewsCompleted: 0, codeQualityScore: 0, issuesFixed: 0, linesReviewed: 0 },
         activity: { lastActive: new Date(), currentStreak: 0, totalContributions: 0 },
@@ -191,58 +178,13 @@ const TeamDashboard: React.FC = () => {
         location: '',
         bio: '',
         linkedin: '',
-        dateJoined: ''
+        dateJoined: undefined
       });
-      setExpertiseInput('');
       setShowForm(false);
     } catch {
       setAddError('Failed to add member.');
     }
     setAdding(false);
-  };
-
-  // Edit member logic
-  const openEditModal = (member: TeamMember) => {
-    setEditMember(member);
-    setEditExpertiseInput((member.expertise || []).join(', '));
-    setEditModalOpen(true);
-  };
-  const handleEditMember = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!editMember || !orgDocId) return;
-    const memberRef = doc(db, 'pendingOrganizations', orgDocId, 'teamMembers', editMember.id);
-    await updateDoc(memberRef, {
-      ...editMember,
-      expertise: editExpertiseInput.split(',').map((s: string) => s.trim()).filter((s: string) => !!s),
-    });
-    setEditModalOpen(false);
-    setEditMember(null);
-  };
-  // Delete member logic
-  const handleDeleteMember = async (id: string) => {
-    if (!orgDocId) return;
-    await deleteDoc(doc(db, 'pendingOrganizations', orgDocId, 'teamMembers', id));
-    setDeleteMemberId(null);
-  };
-  // Profile edit logic
-  const startProfileEdit = () => {
-    setProfileForm({
-      avatar: teamMember.avatar || '',
-      expertise: (teamMember.expertise || []).join(', '),
-      bio: teamMember.bio || ''
-    });
-    setProfileEdit(true);
-  };
-  const handleProfileEdit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!teamMember || !orgDocId || !profileForm) return;
-    const memberRef = doc(db, 'pendingOrganizations', orgDocId, 'teamMembers', teamMember.id);
-    await updateDoc(memberRef, {
-      avatar: profileForm.avatar,
-      expertise: profileForm.expertise.split(',').map((s: string) => s.trim()).filter((s: string) => !!s),
-      bio: profileForm.bio,
-    });
-    setProfileEdit(false);
   };
 
   useEffect(() => {
@@ -275,7 +217,7 @@ const TeamDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [orgDocId, teamMember]);
 
-  const filteredMembers = teamMembers.filter((member: TeamMember) =>
+  const filteredMembers = teamMembers.filter(member =>
     (roleFilter === 'all' || member.role === roleFilter) &&
     (member.name.toLowerCase().includes(search.toLowerCase()) || member.email.toLowerCase().includes(search.toLowerCase()))
   );
@@ -321,7 +263,7 @@ const TeamDashboard: React.FC = () => {
             </div>
             <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">{displayUser.email}</div>
             <div className="flex flex-wrap gap-2 mb-4">
-              {displayUser.expertise && displayUser.expertise.map((exp, idx) => (
+            {displayUser.expertise && displayUser.expertise.map((exp: string, idx: number) => (
                 <span key={idx} className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium">{exp}</span>
               ))}
             </div>
@@ -344,50 +286,10 @@ const TeamDashboard: React.FC = () => {
               </div>
             </div>
           </div>
-<<<<<<< HEAD
-        )}
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="font-semibold text-gray-900 dark:text-white text-xl">{teamMember.name}</span>
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${roleColors[teamMember.role]}`}>{teamMember.role.charAt(0).toUpperCase() + teamMember.role.slice(1)}</span>
-            {teamMember.isOnline && <span className="ml-1 w-2 h-2 bg-green-500 rounded-full inline-block" title="Online"></span>}
-          </div>
-          <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">{teamMember.email}</div>
-          <div className="flex flex-wrap gap-2 mb-1">
-            {(teamMember.expertise || []).map((exp: string, idx: number) => (
-              <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
-            ))}
-          </div>
-          <div className="flex flex-wrap gap-4 text-xs text-gray-600 dark:text-gray-300">
-            <span><strong>{teamMember.stats?.reviewsCompleted || 0}</strong> Reviews</span>
-            <span><strong>{teamMember.stats?.codeQualityScore || 0}</strong> Quality</span>
-            <span><strong>{teamMember.stats?.issuesFixed || 0}</strong> Issues Fixed</span>
-            <span><strong>{teamMember.stats?.linesReviewed || 0}</strong> Lines Reviewed</span>
-          </div>
-        </div>
-        <div>
-          <button className="text-blue-600 hover:underline text-xs font-medium" onClick={startProfileEdit}>Edit Profile</button>
-        </div>
-      </div>
-      {profileEdit && profileForm && (
-        <form onSubmit={handleProfileEdit} className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow p-6 flex flex-col gap-4 border border-gray-100 dark:border-gray-700">
-          <div className="flex gap-4">
-            <input type="text" value={profileForm.avatar} onChange={e => setProfileForm((f: { avatar: string; expertise: string; bio: string } | null) => f ? { ...f, avatar: e.target.value } : f)} placeholder="Avatar URL" className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-64" />
-            <input type="text" value={profileForm.expertise} onChange={e => setProfileForm((f: { avatar: string; expertise: string; bio: string } | null) => f ? { ...f, expertise: e.target.value } : f)} placeholder="Expertise (comma separated)" className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-64" />
-            <input type="text" value={profileForm.bio} onChange={e => setProfileForm((f: { avatar: string; expertise: string; bio: string } | null) => f ? { ...f, bio: e.target.value } : f)} placeholder="Bio" className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-64" />
-          </div>
-          <div className="flex gap-2">
-            <button type="submit" className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium">Save</button>
-            <button type="button" className="px-5 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded text-sm font-medium" onClick={() => setProfileEdit(false)}>Cancel</button>
-          </div>
-        </form>
-      )}
-=======
           </div>
         </div>
       )}
 
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
       {/* Add Member Card (only for lead/architect) */}
       {canAddMembers && (
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
@@ -427,17 +329,12 @@ const TeamDashboard: React.FC = () => {
                 />
               </div>
               <div>
-<<<<<<< HEAD
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Role</label>
-                <select value={newMember.role} onChange={e => setNewMember(n => ({ ...n, role: e.target.value as 'developer' | 'senior' | 'lead' | 'architect' }))} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-=======
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role *</label>
                 <select 
                   value={newMember.role} 
-                  onChange={e => setNewMember(n => ({ ...n, role: e.target.value as any }))} 
+                  onChange={e => setNewMember(n => ({ ...n, role: e.target.value as TeamMember['role'] }))} 
                   className="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
                 >
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
                   <option value="developer">Developer</option>
                   <option value="senior">Senior</option>
                   <option value="lead">Lead</option>
@@ -445,10 +342,6 @@ const TeamDashboard: React.FC = () => {
                 </select>
               </div>
               <div>
-<<<<<<< HEAD
-                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">Expertise (comma separated)</label>
-                <input type="text" value={expertiseInput} onChange={e => setExpertiseInput(e.target.value)} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-56" placeholder="e.g. React, Node.js, Python" />
-=======
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Expertise (comma separated)</label>
                 <input 
                   type="text" 
@@ -457,7 +350,6 @@ const TeamDashboard: React.FC = () => {
                   className="w-full px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors" 
                   placeholder="e.g. React, Node.js, Python" 
                 />
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Phone Number</label>
@@ -494,8 +386,6 @@ const TeamDashboard: React.FC = () => {
           )}
         </div>
       )}
-<<<<<<< HEAD
-=======
 
       {!canAddMembers && (
         <div className="mb-8 bg-blue-50 dark:bg-blue-900/20 rounded-xl p-6 border border-blue-200 dark:border-blue-800">
@@ -509,7 +399,6 @@ const TeamDashboard: React.FC = () => {
         </div>
       )}
 
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
       {/* Search and Filter */}
       <div className="mb-8 bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Search & Filter Team Members</h3>
@@ -534,6 +423,7 @@ const TeamDashboard: React.FC = () => {
         </select>
         </div>
       </div>
+
       {/* Team Members Grid */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-6">
@@ -543,12 +433,6 @@ const TeamDashboard: React.FC = () => {
         {error ? (
           <div className="col-span-full text-center text-red-500 bg-red-50 dark:bg-red-900/20 p-6 rounded-lg">{error}</div>
         ) : filteredMembers.length === 0 ? (
-<<<<<<< HEAD
-          <div className="col-span-full text-center text-gray-400">No team members found.</div>
-        ) : filteredMembers.map((member: TeamMember) => (
-          <div key={member.id} className="bg-white dark:bg-gray-800 rounded-xl shadow p-5 flex flex-col gap-3 border border-gray-100 dark:border-gray-700">
-            <div className="flex items-center gap-3 mb-2">
-=======
           <div className="col-span-full text-center text-gray-400 bg-gray-50 dark:bg-gray-800 p-12 rounded-lg">
             <div className="text-6xl mb-4">👥</div>
             <h4 className="text-lg font-medium mb-2">No team members found</h4>
@@ -557,7 +441,6 @@ const TeamDashboard: React.FC = () => {
         ) : filteredMembers.map(member => (
           <div key={member.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border border-gray-100 dark:border-gray-700 hover:shadow-xl transition-shadow">
             <div className="flex items-center gap-4 mb-4">
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
               {member.avatar ? (
                 <img src={member.avatar} alt={member.name} className="w-16 h-16 rounded-full object-cover border-3 border-blue-200 shadow-md" />
               ) : (
@@ -574,15 +457,9 @@ const TeamDashboard: React.FC = () => {
                 <span className={`px-3 py-1 rounded-full text-sm font-semibold ${roleColors[member.role]}`}>{member.role.charAt(0).toUpperCase() + member.role.slice(1)}</span>
               </div>
             </div>
-<<<<<<< HEAD
-            <div className="flex flex-wrap gap-2 mb-2">
-              {(member.expertise || []).map((exp: string, idx: number) => (
-                <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-xs font-medium">{exp}</span>
-=======
             <div className="flex flex-wrap gap-2 mb-4">
               {member.expertise && member.expertise.map((exp, idx) => (
                 <span key={idx} className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-medium">{exp}</span>
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
               ))}
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
@@ -603,56 +480,14 @@ const TeamDashboard: React.FC = () => {
                 <div className="text-xs text-gray-500 dark:text-gray-400">Lines Reviewed</div>
               </div>
             </div>
-<<<<<<< HEAD
-            {(teamMember.role === 'lead' || teamMember.role === 'architect') && (
-              <div className="flex justify-end mt-2 gap-2">
-                <button className="text-blue-600 hover:underline text-xs font-medium" onClick={() => openEditModal(member)}>Edit</button>
-                <button className="text-red-600 hover:underline text-xs font-medium" onClick={() => setDeleteMemberId(member.id)}>Delete</button>
-              </div>
-            )}
-=======
             <div className="flex justify-center">
               <button className="w-full px-4 py-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors font-medium">View Profile</button>
             </div>
->>>>>>> d1f92fe8f1b44ab5d0ce563350b4856a385037c9
           </div>
         ))}
         </div>
       </div>
-      {/* Edit Member Modal */}
-      {editModalOpen && editMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <form onSubmit={handleEditMember} className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 flex flex-col gap-4 border border-gray-100 dark:border-gray-700 w-full max-w-md">
-            <h3 className="text-lg font-semibold mb-2">Edit Member</h3>
-            <input type="text" value={editMember.name} onChange={e => setEditMember(m => m ? { ...m, name: e.target.value } : m)} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" required />
-            <input type="text" value={editMember.avatar} onChange={e => setEditMember(m => m ? { ...m, avatar: e.target.value } : m)} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="Avatar URL" />
-            <input type="text" value={editExpertiseInput} onChange={e => setEditExpertiseInput(e.target.value)} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm" placeholder="Expertise (comma separated)" />
-            <select value={editMember.role} onChange={e => setEditMember(m => m ? { ...m, role: e.target.value as 'developer' | 'senior' | 'lead' | 'architect' } : m)} className="px-3 py-2 rounded bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white text-sm">
-              <option value="developer">Developer</option>
-              <option value="senior">Senior</option>
-              <option value="lead">Lead</option>
-              <option value="architect">Architect</option>
-            </select>
-            <div className="flex gap-2 mt-2">
-              <button type="submit" className="px-5 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium">Save</button>
-              <button type="button" className="px-5 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded text-sm font-medium" onClick={() => setEditModalOpen(false)}>Cancel</button>
-            </div>
-          </form>
-        </div>
-      )}
-      {/* Delete Member Modal */}
-      {deleteMemberId && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-8 border border-gray-100 dark:border-gray-700 w-full max-w-sm text-center">
-            <h3 className="text-lg font-semibold mb-4">Remove Team Member?</h3>
-            <p className="mb-6">Are you sure you want to remove this member from the team?</p>
-            <div className="flex gap-2 justify-center">
-              <button className="px-5 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium" onClick={() => handleDeleteMember(deleteMemberId)}>Remove</button>
-              <button className="px-5 py-2 bg-gray-300 dark:bg-gray-700 text-gray-900 dark:text-white rounded text-sm font-medium" onClick={() => setDeleteMemberId(null)}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
+
       {/* Assignments Section */}
       <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border border-gray-100 dark:border-gray-700">
         <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Assignments</h2>
