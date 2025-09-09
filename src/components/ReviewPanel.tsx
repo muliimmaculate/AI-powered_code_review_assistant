@@ -18,7 +18,6 @@ import {
   ExternalLink,
   Lightbulb
 } from 'lucide-react';
-import { ENDPOINTS } from '../config';
 
 interface Issue {
   type: string;
@@ -579,15 +578,19 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
                 setSendError(null);
                 setSendSuccess(null);
                 try {
-                  const response = await fetch(ENDPOINTS.sendRecommendationEmail, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      name: recipientName,
-                      email: recipientEmail,
-                      recommendation: recommendationToSend,
-                    }),
-                  });
+                  const response = await fetch(
+                    // Update this URL to your deployed function endpoint if needed
+                    'http://127.0.0.1:5001/project-70cbf/us-central1/sendRecommendationEmail',
+                    {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        name: recipientName,
+                        email: recipientEmail,
+                        recommendation: recommendationToSend,
+                      }),
+                    }
+                  );
                   const data = await response.json();
                   if (!response.ok) {
                     throw new Error(data.error || 'Failed to send email');

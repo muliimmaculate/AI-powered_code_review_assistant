@@ -1,20 +1,9 @@
-
 const {setGlobalOptions} = require("firebase-functions");
 const {onRequest} = require("firebase-functions/https");
 const logger = require("firebase-functions/logger");
 const functions = require('firebase-functions');
 const nodemailer = require('nodemailer');
 require("dotenv").config();
-const { ESLint } = require('eslint');
-const YAML = require('js-yaml');
-const { XMLParser } = require('fast-xml-parser');
-const HTMLHint = require('htmlhint').HTMLHint;
-const stylelint = require('stylelint');
-const markdownlint = require('markdownlint');
-const { execFile } = require('node:child_process');
-const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
-const { tmpdir } = require('node:os');
-const { join } = require('node:path');
 
 setGlobalOptions({ maxInstances: 10 });
 
@@ -78,32 +67,35 @@ exports.sendRecommendationEmail = onRequest(withCors(async (req, res) => {
       .filter(t => t.length > 0);
   }
 
-  const PLACEHOLDER_LOGIN_URL = 'http://localhost:5173/login';
   const mailOptions = {
     from: process.env.EMAIL_USER,
     to: email,
-    subject: `Welcome to AI Code Review Assistant, ${name}!`,
-    text: `Hello ${name},\n\nYou have been added to the AI Code Review Assistant system.\n\nTo access your account, please log in using your email address at: ${PLACEHOLDER_LOGIN_URL}\nIf you do not have a password, use the 'Forgot Password' link on the login page to set one.\n\nBest regards,\nAI Code Review Assistant`,
+    subject: `Code Review Recommendation for ${name}`,
+    text: `Hello ${name},\n\nHere are your code review recommendations:\n\n${tips.map(t => '- ' + t).join('\n')}\n\nBest regards,\nAI Code Review Assistant`,
     html: `
       <div style="max-width:520px;margin:36px auto;background:#fff;border-radius:14px;box-shadow:0 4px 24px #e3e8f0;border:1px solid #e5e7eb;padding:0;font-family:'Segoe UI',Arial,sans-serif;overflow:hidden;">
         <div style="background:#2563eb;padding:28px 0 16px 0;text-align:center;border-radius:14px 14px 0 0;">
-          <h1 style="color:#fff;margin:0;font-size:2rem;letter-spacing:0.5px;font-weight:700;">Welcome to AI Code Review Assistant</h1>
+          <h1 style="color:#fff;margin:0;font-size:2rem;letter-spacing:0.5px;font-weight:700;">Code Review Recommendations</h1>
         </div>
         <div style="padding:32px 32px 24px 32px;background:#fff;">
           <p style="font-size:17px;color:#1e293b;margin:0 0 18px 0;">Hello <strong>${name}</strong>,</p>
-          <p style="font-size:15px;color:#334155;margin:0 0 20px 0;">You have been added to the AI Code Review Assistant system.</p>
+          <p style="font-size:15px;color:#334155;margin:0 0 20px 0;">Please find below your code review recommendations:</p>
           <ul style="padding-left:0;list-style:none;margin:0 0 18px 0;">
-            <li style="display:flex;align-items:flex-start;margin-bottom:14px;font-size:15px;line-height:1.7;"><span style='display:inline-block;color:#2563eb;font-size:1.1em;margin-right:12px;margin-top:2px;'>&#10003;</span><span>Log in at <a href='${PLACEHOLDER_LOGIN_URL}' style='color:#2563eb;text-decoration:underline;'>${PLACEHOLDER_LOGIN_URL}</a></span></li>
-            <li style="display:flex;align-items:flex-start;margin-bottom:14px;font-size:15px;line-height:1.7;"><span style='display:inline-block;color:#2563eb;font-size:1.1em;margin-right:12px;margin-top:2px;'>&#10003;</span><span>If you do not have a password, use the <b>Forgot Password</b> link to set one.</span></li>
+            ${
+              tips.map(t => `
+                <li style="display:flex;align-items:flex-start;margin-bottom:14px;font-size:15px;line-height:1.7;">
+                  <span style='display:inline-block;color:#2563eb;font-size:1.1em;margin-right:12px;margin-top:2px;'>&#10003;</span>
+                  <span style='display:inline-block;vertical-align:top;'>${t}</span>
+                </li>
+              `).join('')
+            }
           </ul>
           <div style="height:1px;background:#e5e7eb;margin:32px 0 18px 0;border-radius:2px;"></div>
           <div style="text-align:right;">
             <span style="color:#2563eb;font-weight:600;font-size:14px;">AI Code Review Assistant</span>
           </div>
         </div>
-        <div style="background:#f1f5f9;padding:12px 0;text-align:center;font-size:13px;color:#64748b;">
-          <span>This is an automated message. Please do not reply.</span>
-        </div>
+      
       </div>
     `,
   };
@@ -117,6 +109,7 @@ exports.sendRecommendationEmail = onRequest(withCors(async (req, res) => {
     logger.error('Error sending email:', error);
     return res.status(500).json({ error: 'Failed to send email' });
   }
+<<<<<<< HEAD
 }));
 
 // Add a new endpoint to trigger Firebase password reset email
@@ -628,3 +621,6 @@ exports.analyzeCode = onRequest(withCors(async (req, res) => {
     return res.status(500).json({ error: 'Failed to analyze code' });
   }
 }));
+=======
+});
+>>>>>>> d530ddd1b9ae4ce4bc3c959b411d890d353753b7
