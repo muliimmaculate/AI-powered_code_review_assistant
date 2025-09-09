@@ -17,7 +17,17 @@
     "dotenv": "^17.2.0",
     "firebase-admin": "^12.6.0",
     "firebase-functions": "^6.0.1",
-    "nodemailer": "^7.0.5"
+    "nodemailer": "^7.0.5",
+    "eslint": "^9.9.1",
+    "@typescript-eslint/parser": "^8.3.0",
+    "@typescript-eslint/eslint-plugin": "^8.3.0",
+    "js-yaml": "^4.1.0",
+    "fast-xml-parser": "^4.5.0",
+    "htmlhint": "^1.1.4",
+    "stylelint": "^16.9.0",
+    "stylelint-config-standard": "^36.0.0",
+    "markdownlint": "^0.32.1",
+    "pyright": "^1.1.381"
   },
   "devDependencies": {
     "firebase-functions-test": "^3.1.0"
