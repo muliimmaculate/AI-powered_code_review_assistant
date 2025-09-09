@@ -571,26 +571,30 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
               <XCircle className="w-6 h-6" />
             </button>
             <h4 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Send Recommendation</h4>
-            <form
+            <form action=""></form>
+            <form className="space-y-4"
               onSubmit={async e => {
                 e.preventDefault();
                 setSending(true);
                 setSendError(null);
                 setSendSuccess(null);
                 try {
-                  const response = await fetch(
-                    // Update this URL to your deployed function endpoint if needed
-                    'http://127.0.0.1:5001/project-70cbf/us-central1/sendRecommendationEmail',
-                    {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({
-                        name: recipientName,
-                        email: recipientEmail,
-                        recommendation: recommendationToSend,
-                      }),
-                    }
-                  );
+                  // Use the correct Firebase Functions URL with proper CORS handling
+                  const functionsUrl = process.env.NODE_ENV === 'production' 
+                    ? 'https://us-central1-project-70cbf.cloudfunctions.net/sendRecommendationEmail'
+                    : '/api/sendRecommendationEmail'; // Use proxy in development
+                    
+                  const response = await fetch(functionsUrl, {
+                    method: 'POST',
+                    headers: { 
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      name: recipientName,
+                      email: recipientEmail,
+                      recommendation: recommendationToSend,
+                    }),
+                  });
                   const data = await response.json();
                   if (!response.ok) {
                     throw new Error(data.error || 'Failed to send email');
@@ -605,10 +609,7 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
                   setSendError(errorMessage);
                   setSending(false);
                 }
-                }
-          
-              className="space-y-4"
-            >
+                }}>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Recipient Name</label>
                 <input
