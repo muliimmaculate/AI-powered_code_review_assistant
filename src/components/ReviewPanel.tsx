@@ -597,11 +597,13 @@ const ReviewPanel: React.FC<ReviewPanelProps> = ({ analysis, isAnalyzing, onAuto
                     setSending(false);
                     closeSendModal();
                   }, 1200);
-                } catch (err: any) {
-                  setSendError(err.message || 'Failed to send email');
+                } catch (err: unknown) {
+                  const errorMessage = err instanceof Error ? err.message : 'Failed to send email';
+                  setSendError(errorMessage);
                   setSending(false);
                 }
-              }}
+                }
+          
               className="space-y-4"
             >
               <div>

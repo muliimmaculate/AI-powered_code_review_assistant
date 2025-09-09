@@ -18,18 +18,44 @@ const { join } = require('node:path');
 
 setGlobalOptions({ maxInstances: 10 });
 
+// CORS helper
+const withCors = (handler) => async (req, res) => {
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') {
+    return res.status(204).send('');
+  }
+  return handler(req, res);
+};
+
+// Email transporter (Gmail or Ethereal fallback)
+let cachedTransporter = null;
+async function getTransporter() {
+  if (cachedTransporter) return cachedTransporter;
+  if (process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+    cachedTransporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+    });
+    return cachedTransporter;
+  }
+  const test = await nodemailer.createTestAccount();
+  cachedTransporter = nodemailer.createTransport({
+    host: 'smtp.ethereal.email',
+    port: 587,
+    secure: false,
+    auth: { user: test.user, pass: test.pass },
+  });
+  return cachedTransporter;
+}
 
 
-const transporter = nodemailer.createTransport({
-  service: 'gmail', 
-  auth: {
-    user: process.env.EMAIL_USER, 
-    pass: process.env.EMAIL_PASS,
-  },
-});
+
+// Note: transporter is provided by getTransporter()
 
 // Cloud Function to send recommendation email
-exports.sendRecommendationEmail = onRequest(async (req, res) => {
+exports.sendRecommendationEmail = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -83,20 +109,22 @@ exports.sendRecommendationEmail = onRequest(async (req, res) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    return res.status(200).json({ success: true, message: 'Email sent successfully' });
+    const transporter = await getTransporter();
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl ? nodemailer.getTestMessageUrl(info) : null;
+    return res.status(200).json({ success: true, message: 'Email sent successfully', previewUrl });
   } catch (error) {
     logger.error('Error sending email:', error);
     return res.status(500).json({ error: 'Failed to send email' });
   }
-});
+}));
 
 // Add a new endpoint to trigger Firebase password reset email
 const admin = require('firebase-admin');
 if (!admin.apps.length) {
   admin.initializeApp();
 }
-exports.sendPasswordReset = onRequest(async (req, res) => {
+exports.sendPasswordReset = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -112,10 +140,10 @@ exports.sendPasswordReset = onRequest(async (req, res) => {
     logger.error('Error sending password reset email:', error);
     return res.status(500).json({ error: 'Failed to send password reset email' });
   }
-});
+}));
 
 // New endpoint: send full analysis report via email
-exports.sendAnalysisReport = onRequest(async (req, res) => {
+exports.sendAnalysisReport = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
@@ -149,22 +177,29 @@ exports.sendAnalysisReport = onRequest(async (req, res) => {
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    return res.status(200).json({ success: true });
+    const transporter = await getTransporter();
+    const info = await transporter.sendMail(mailOptions);
+    const previewUrl = nodemailer.getTestMessageUrl ? nodemailer.getTestMessageUrl(info) : null;
+    return res.status(200).json({ success: true, previewUrl });
   } catch (error) {
     logger.error('Error sending analysis report email:', error);
     return res.status(500).json({ error: 'Failed to send analysis report' });
   }
-});
+}));
 
 // New endpoint: Analyze JS/TS using ESLint for precise results
-exports.analyzeCode = onRequest(async (req, res) => {
+exports.analyzeCode = onRequest(withCors(async (req, res) => {
   if (req.method !== 'POST') {
     return res.status(405).send('Method Not Allowed');
   }
   const { code, language } = req.body || {};
   if (!code) {
     return res.status(400).json({ error: 'Missing code' });
+  }
+  // Input size limit: 200KB
+  const maxBytes = 200 * 1024;
+  if (Buffer.byteLength(code, 'utf8') > maxBytes) {
+    return res.status(413).json({ error: 'Code too large. Max 200KB.' });
   }
   try {
     // HTML precise validation
@@ -592,4 +627,4 @@ exports.analyzeCode = onRequest(async (req, res) => {
     logger.error('ESLint analysis error:', error);
     return res.status(500).json({ error: 'Failed to analyze code' });
   }
-});
+}));

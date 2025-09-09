@@ -88,7 +88,7 @@ function App() {
     const detection = hljs.highlightAuto(codeContent);
     const language = detection.language || 'unknown';
 
-    // Try precise backend analyzer first for supported languages
+    // Try precise backend analyzer for supported languages
     if (["javascript", "typescript", "html", "xml", "json", "yaml", "yml", "python", "java", "c", "cpp", "c++"].includes(language)) {
       try {
         const resp = await fetch(ENDPOINTS.analyzeCode, {
@@ -112,205 +112,17 @@ function App() {
         setIsAnalyzing(false);
         return;
       } catch (e) {
-        console.error('Precise analysis failed, using heuristic fallback:', e);
+        console.error('Precise analysis failed:', e);
+        setIsAnalyzing(false);
+        window.alert('Analysis failed. Please try again or reduce file size.');
+        return;
       }
     }
 
-    setTimeout(() => {
-      const lines = codeContent.split('\n');
-      const linesOfCode = lines.length;
-      const issues: Issue[] = [];
-      let syntaxError: string | null = null;
-      let functionCount = 0;
-      let commentLines = 0;
-      let longFunctions = 0;
-      let maxNesting = 0;
-      let duplicateLines = 0;
-      const variableNames: string[] = [];
-      let inconsistentNaming = false;
-      let cyclomaticComplexity = 1;
-      let magicNumberCount = 0;
-      const duplicateBlocks = 0;
-      const declaredVariables = new Set<string>();
-      let inFunction = false;
-      let currentFunctionLength = 0;
-      let currentNesting = 0;
-      let maxCurrentNesting = 0;
-      const lineMap: { [key: string]: number } = {};
-      
-
-      // Language-specific syntax checks
-      if (language === 'javascript') {
-        try {
-          new Function(codeContent);
-        } catch (e: unknown) {
-          const errMsg = e instanceof Error ? e.message : String(e);
-          syntaxError = errMsg;
-          issues.push({
-            type: 'syntax',
-            severity: 'critical',
-            category: 'Syntax',
-            message: `Syntax error: ${errMsg}`,
-            line: 1,
-            column: 1,
-            code: '',
-            suggestion: 'Fix the syntax error',
-            fixedCode: '',
-            confidence: 100,
-            impact: 'high',
-            effort: 'medium'
-          });
-        }
-
-        // Security checks
-        if (/\beval\s*\(/.test(codeContent) || /new\s+Function\s*\(/.test(codeContent)) {
-          issues.push({
-            type: 'security',
-            severity: 'critical',
-            category: 'Security',
-            message: 'Use of eval or Function constructor detected',
-            line: 1,
-            column: 1,
-            code: '',
-            suggestion: 'Avoid using eval or Function constructor for security reasons',
-            fixedCode: '',
-            confidence: 95,
-            impact: 'high',
-            effort: 'high'
-          });
-        }
-
-        if (/password\s*=\s*['"].+['"]/i.test(codeContent) || /api[_-]?key\s*=\s*['"].+['"]/i.test(codeContent)) {
-          issues.push({
-            type: 'security',
-            severity: 'high',
-            category: 'Security',
-            message: 'Possible hardcoded credential detected',
-            line: 1,
-            column: 1,
-            code: '',
-            suggestion: 'Do not hardcode credentials in code',
-            fixedCode: '',
-            confidence: 90,
-            impact: 'high',
-            effort: 'high'
-          });
-        }
-      }
-
-      // Advanced code quality checks
-
-      lines.forEach((line) => {
-        const trimmed = line.trim();
-
-        // Function detection
-        const funcMatch = trimmed.match(/(function|def|public |private |protected |static )\s*([a-zA-Z0-9_]+)?\s*\(([^)]*)\)/);
-        if (funcMatch) {
-          if (!inFunction) {
-            functionCount++;
-          }
-          currentFunctionLength = 0;
-          inFunction = true;
-        }
-
-        if (inFunction) currentFunctionLength++;
-
-        // End of function
-        if (inFunction && trimmed === '}') {
-          if (currentFunctionLength > 30) longFunctions++;
-          inFunction = false;
-        }
-
-        // Comments
-        if (/^\/\//.test(trimmed) || /^#/.test(trimmed)) commentLines++;
-
-        // Nesting
-        if (trimmed.endsWith('{')) currentNesting++;
-        if (trimmed.endsWith('}')) currentNesting = Math.max(0, currentNesting - 1);
-        if (currentNesting > maxCurrentNesting) maxCurrentNesting = currentNesting;
-
-        // Cyclomatic complexity
-        if (/\b(if|for|while|case |catch|\?|&&|\|\|)\b/.test(trimmed)) cyclomaticComplexity++;
-
-        // Variable naming
-        const varMatch = trimmed.match(/(var|let|const|int|String|double|float|boolean)\s+([a-zA-Z0-9_]+)/);
-        if (varMatch) {
-          variableNames.push(varMatch[2]);
-          declaredVariables.add(varMatch[2]);
-        }
-
-        // Duplicate lines
-        if (trimmed && lineMap[trimmed]) duplicateLines++;
-        lineMap[trimmed] = (lineMap[trimmed] || 0) + 1;
-
-        // Magic numbers
-        if (/\b\d+\b/.test(trimmed) && !/^\s*(const|let|var|int|float|double|#|\/\/)/.test(trimmed)) {
-          magicNumberCount++;
-        }
-      });
-
-      maxNesting = maxCurrentNesting;
-
-      // Naming consistency
-      if (variableNames.length > 1) {
-        const camel = variableNames.filter(n => /[a-z][A-Z]/.test(n)).length;
-        const snake = variableNames.filter(n => /_/.test(n)).length;
-        if (camel > 0 && snake > 0) inconsistentNaming = true;
-      }
-
-      // Generate recommendations
-      const recommendations: string[] = [];
-      if (syntaxError) recommendations.push('Fix all syntax errors before running the code.');
-      if (longFunctions > 0) recommendations.push('Split long functions into smaller, focused ones.');
-      if (maxNesting > 3) recommendations.push('Reduce nesting for better readability.');
-      if (duplicateLines > 0) recommendations.push('Remove duplicate lines of code.');
-      if (inconsistentNaming) recommendations.push('Use consistent variable naming (camelCase or snake_case).');
-      if (functionCount === 0) recommendations.push('Consider organizing code into functions for better structure.');
-      if (commentLines / linesOfCode < 0.05) recommendations.push('Add more comments to explain complex logic.');
-      if (magicNumberCount > 0) recommendations.push('Replace magic numbers with named constants.');
-      if (issues.some(i => i.type === 'security')) recommendations.push('Address all security issues immediately.');
-      if (recommendations.length === 0) recommendations.push('Code looks good! Keep following best practices.');
-
-      // Calculate metrics
-      const metrics = {
-        complexity: Math.min(100, maxNesting * 20 + longFunctions * 10 + cyclomaticComplexity * 5),
-        maintainability: Math.max(20, 100 - (longFunctions * 10 + maxNesting * 5 + duplicateBlocks * 10)),
-        readability: Math.max(30, 100 - (maxNesting * 10 + longFunctions * 5 + duplicateBlocks * 10)),
-        performance: 100,
-        security: 100,
-        documentation: Math.round((commentLines / linesOfCode) * 100),
-        cyclomaticComplexity,
-        cognitiveComplexity: maxNesting + longFunctions,
-        linesOfCode,
-        duplicateLines,
-        testCoverage: 0
-      };
-
-      const score = Math.max(0, 100 - (issues.length * 10) - (longFunctions * 5) - (maxNesting * 3) - (duplicateLines * 2));
-
-      const summary = {
-        totalIssues: issues.length,
-        criticalIssues: issues.filter(i => i.severity === 'critical').length,
-        highIssues: issues.filter(i => i.severity === 'high').length,
-        mediumIssues: issues.filter(i => i.severity === 'medium').length,
-        lowIssues: issues.filter(i => i.severity === 'low').length,
-        securityIssues: issues.filter(i => i.category === 'Security').length,
-        performanceIssues: issues.filter(i => i.category === 'Performance').length,
-        qualityIssues: issues.filter(i => i.category === 'Code Quality').length
-      };
-
-      setAnalysis({
-        language,
-        score,
-        issues,
-        summary,
-        metrics,
-        recommendations,
-        codeSmells: longFunctions + (maxNesting > 3 ? 1 : 0) + (duplicateLines > 0 ? 1 : 0),
-        technicalDebt: `Estimated ${(issues.length * 0.5 + longFunctions * 0.2 + maxNesting * 0.1).toFixed(1)} hours to resolve all issues.`
-      });
-      setIsAnalyzing(false);
-    }, 800);
+    // Unsupported language
+    setIsAnalyzing(false);
+    window.alert('Unsupported language for precise analysis.');
+    return;
   };
 
   // Send email with analysis results via Cloud Function
